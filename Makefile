@@ -2,8 +2,8 @@ IDIR = ./inc
 CC = CL
 #CFLAGS = -I
 
-L1IFtap.exe: L1IFtap.c
-	$(CC) L1IFtap.c
+L1IFtap.exe: L1IFtap.c inc/circular_buffer.c
+	$(CC) L1IFtap.c inc/circular_buffer.c
 	rm *.obj
 
 clean:
