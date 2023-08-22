@@ -5,7 +5,7 @@
 #include <stdio.h>
 
 #define MLEN 65536
-//#define CBUFSZ 262144
+#define CBUFFSZ 32768
 
 typedef struct
 {
@@ -92,6 +92,7 @@ int main(int argc, char *argv[])
   FT_HANDLE ftH;
   FT_STATUS ftS;
 
+  float sampleTime = 0.0;
   unsigned long i = 0, totalBytes = 0, targetBytes = 0;
   unsigned char sampleValue;
   char valueToWrite;
@@ -101,10 +102,10 @@ int main(int argc, char *argv[])
   uint8_t ch;
 
   int16_t cbstatus;
-  uint8_t CBuff[32768];
+  uint8_t CBuff[CBUFFSZ];
 //  uint8_t *CBuff = malloc(CBUFSZ * sizeof(uint8_t));
 //  cbuf_handle_t cb = circular_buf_init(CBuff, CBUFFSZ);
-  cbuf_handle_t cb = circular_buf_init(CBuff, 32768);
+  cbuf_handle_t cb = circular_buf_init(CBuff, CBUFFSZ);
   bool full = circular_buf_full(cb);
   bool empty = circular_buf_empty(cb);
 
@@ -120,6 +121,7 @@ int main(int argc, char *argv[])
   if (argc == 2)
   {
     targetBytes = 8184 * atoi(argv[1]); // number of milliseconds to record
+    sampleTime = (float) (targetBytes / 8184) / 1000;
     // targetBytes = 16368 * atoi(argv[1]);
   }
   else
@@ -130,7 +132,8 @@ int main(int argc, char *argv[])
 
   /* After Arguments Parsed, Open [Optional] Files */
   RAW = fopen("L1IFDATA.raw", "wb");
-  fprintf(stderr, "Looking for %d Bytes (N*8184)\n", targetBytes);
+  fprintf(stderr, "Looking for %d Bytes (N*8184) %6.3f sec\n",
+   targetBytes, sampleTime);
   // ftS = FT_OpenEx("A", FT_OPEN_BY_SERIAL_NUMBER, &fthandle1);
   // ftS = FT_OpenEx("GPS4WEIT9", FT_OPEN_BY_SERIAL_NUMBER, &fthandle1);
   // ftS = FT_OpenEx("USB<->GPS", FT_OPEN_BY_DESCRIPTION, &fthandle1);
