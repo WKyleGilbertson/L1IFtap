@@ -5,7 +5,7 @@
 #include <stdio.h>
 
 #define MLEN 65536
-#define CBUFSZ 262144
+//#define CBUFSZ 262144
 
 typedef struct
 {
@@ -100,9 +100,11 @@ int main(int argc, char *argv[])
   uint8_t blankLine[120];
   uint8_t ch;
 
-  uint8_t *CBuff = malloc(CBUFSZ * sizeof(uint8_t));
   int16_t cbstatus;
-  cbuf_handle_t cb = circular_buf_init(CBuff, CBUFSZ);
+  uint8_t CBuff[32768];
+//  uint8_t *CBuff = malloc(CBUFSZ * sizeof(uint8_t));
+//  cbuf_handle_t cb = circular_buf_init(CBuff, CBUFFSZ);
+  cbuf_handle_t cb = circular_buf_init(CBuff, 32768);
   bool full = circular_buf_full(cb);
   bool empty = circular_buf_empty(cb);
 
@@ -176,7 +178,7 @@ int main(int argc, char *argv[])
       {
         for (i = 0; i < rx.CNT; i++)
         {
-          circular_buf_try_put(cb, rx.MSG[i]);
+          cbstatus = circular_buf_try_put(cb, rx.MSG[i]);
           totalBytes += 1;
           if (totalBytes % 8184 == 0) // 8184 Bytes = 1 ms of data
           {
@@ -192,7 +194,7 @@ int main(int argc, char *argv[])
     }                            // end Read was not an error
   }                              // end while loop
 
-  free(CBuff);
+//  free(CBuff);
 
   if (FT_W32_PurgeComm(ftH, PURGE_TXCLEAR | PURGE_RXCLEAR))
     printf("\nPurging Buffers\n");
