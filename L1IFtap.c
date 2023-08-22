@@ -151,6 +151,7 @@ int main(int argc, char *argv[])
           for (i=0; i<rx.CNT; i++) {
         fputc(rx.MSG[i], RAW);
         totalBytes += 1;
+        if (totalBytes % 8184 == 0) printf("ms\n");
         if (totalBytes == targetBytes) break;
         //    sampleValue =  rx.MSG[idx] & 0x03;
           }
