@@ -47,18 +47,18 @@ void readConfig(FT_HANDLE ftH)
     fprintf(stderr, "FIFO:%s  ",
             (ftData.IFAIsFifo7 != 0) ? "Yes" : "No");
   else
-    printf("Not Okay? %d\n", ftS);
+    fprintf(stderr, "Not Okay? %d\n", ftS);
 
   ftS = FT_GetComPortNumber(ftH, &lComPortNumber);
   if (ftS == FT_OK)
   {
     if (lComPortNumber == -1)
     {
-      printf("No COM port assigned\n");
+      fprintf(stderr, "No COM port assigned\n");
     }
     else
     {
-      printf("COM Port: %d ", lComPortNumber);
+      fprintf(stderr, "COM Port: %d ", lComPortNumber);
     }
   }
 
@@ -68,7 +68,7 @@ void readConfig(FT_HANDLE ftH)
 int main(int argc, char *argv[])
 {
   FILE *RAW;
-  PKT rx, tx;
+  PKT rx;
 
   FT_HANDLE ftH;
   FT_STATUS ftS;
