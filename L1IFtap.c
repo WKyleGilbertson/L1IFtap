@@ -67,16 +67,22 @@ void readConfig(FT_HANDLE ftH)
   fprintf(stderr, "Desc:%s SN:%s \n", ftData.Description, ftData.SerialNumber);
 }
 
-/*void writeMillisecond(FILE *OUT, cbuf_handle_t CB)
+void writeMillisecond(FILE *fp, cbuf_handle_t cbH)
 {
   uint8_t ch;
+  uint32_t sze = circular_buf_size(cbH);
+  uint32_t idx;
 
-  while (circular_buf_size(CB) > 0)
+  for (idx=0; idx<sze; idx++)
   {
-    circular_buf_get(CB, &ch);
-    fputc(ch, OUT);
+    circular_buf_get(cbH, &ch);
+    fputc(ch, fp);
   }
-} */
+  if (circular_buf_size(cbH) != 0) {
+    fprintf(stderr, "Error, Circ Buf Not Empty\n");
+    exit(1);
+  }
+}
 
 int main(int argc, char *argv[])
 {
@@ -171,31 +177,24 @@ int main(int argc, char *argv[])
         for (i = 0; i < rx.CNT; i++)
         {
           circular_buf_try_put(cb, rx.MSG[i]);
-          //        fputc(rx.MSG[i], RAW);
           totalBytes += 1;
-          // if (totalBytes % 8184 == 0){
-          if (circular_buf_size(cb) % 8184 == 0)
+          if (totalBytes % 8184 == 0)
           {
-            fprintf(stderr, "CB Size: %zu\n", circular_buf_size(cb));
-    //        writeMillisecond(RAW, cb);
-            while (circular_buf_size(cb) > 0)
-            {
-              circular_buf_get(cb, &ch);
-              fputc(ch, RAW);
-            }
-          }
+//            fprintf(stderr, "CB Size: %zu\n", circular_buf_size(cb));
+            writeMillisecond(RAW, cb);
             if (totalBytes == targetBytes)
               break;
-            //    sampleValue =  rx.MSG[idx] & 0x03;
           }
-          //        fprintf(stderr, "%d %d \n", rx.CNT, totalBytes);
-        }                          // end buffer read not too big
-        memset(rx.MSG, 0, rx.CNT); // May not be necessary
-      }                            // end Read was not an error
-    }                              // end while loop
-    if (FT_W32_PurgeComm(ftH, PURGE_TXCLEAR | PURGE_RXCLEAR))
-      printf("\nPurging Buffers\n");
-    ftS = FT_Close(ftH);
-    fclose(RAW);
-  
+        }
+      }                          // end buffer read not too big
+      memset(rx.MSG, 0, rx.CNT); // May not be necessary
+    }                            // end Read was not an error
+  }                              // end while loop
+
+  free(CBuff);
+
+  if (FT_W32_PurgeComm(ftH, PURGE_TXCLEAR | PURGE_RXCLEAR))
+    printf("\nPurging Buffers\n");
+  ftS = FT_Close(ftH);
+  fclose(RAW);
 }
