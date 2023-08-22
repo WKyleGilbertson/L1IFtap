@@ -67,7 +67,7 @@ void readConfig(FT_HANDLE ftH)
   fprintf(stderr, "Desc:%s SN:%s \n", ftData.Description, ftData.SerialNumber);
 }
 
-void writeMillisecond(FILE *fp, cbuf_handle_t cbH)
+void purgeCBUFFtoFile(FILE *fp, cbuf_handle_t cbH)
 {
   uint8_t ch;
   uint32_t sze = circular_buf_size(cbH);
@@ -178,10 +178,11 @@ int main(int argc, char *argv[])
         {
           circular_buf_try_put(cb, rx.MSG[i]);
           totalBytes += 1;
-          if (totalBytes % 8184 == 0)
+          if (totalBytes % 8184 == 0) // 8184 Bytes = 1 ms of data
           {
 //            fprintf(stderr, "CB Size: %zu\n", circular_buf_size(cb));
-            writeMillisecond(RAW, cb);
+            // Write to UDP stream or copy 1 ms of data, then put it to a file and 
+            purgeCBUFFtoFile(RAW, cb);
             if (totalBytes == targetBytes)
               break;
           }
