@@ -100,6 +100,9 @@ int main(int argc, char *argv[])
   FT_HANDLE ftH;
   FT_STATUS ftS;
 
+  WSADATA wsaData;
+
+  int iResult; // WSA
   float sampleTime = 0.0;
   unsigned long i = 0, totalBytes = 0, targetBytes = 0;
   unsigned char sampleValue;
@@ -123,6 +126,7 @@ int main(int argc, char *argv[])
 
   memset(rx.MSG, 0, 65536);
 
+
   /* Insert Argument Parser Here */
   if (argc == 2)
   {
@@ -145,6 +149,13 @@ int main(int argc, char *argv[])
   {
     fprintf(stderr, "open device status not ok %d\n", ftS);
     exit(1);
+  }
+
+  /* If using UDP, set it up */
+  iResult = WSAStartup(MAKEWORD(2,2), &wsaData);
+  if (iResult != 0) {
+    fprintf(stderr, "WSAStartup failed: %d\n", iResult);
+    return 1;
   }
 
   readConfig(ftH);
