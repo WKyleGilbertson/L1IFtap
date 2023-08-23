@@ -73,12 +73,13 @@ void purgeCBUFFtoFile(FILE *fp, cbuf_handle_t cbH)
   uint32_t sze = circular_buf_size(cbH);
   uint32_t idx;
 
-  for (idx=0; idx<sze; idx++)
+  for (idx = 0; idx < sze; idx++)
   {
     circular_buf_get(cbH, &ch);
     fputc(ch, fp);
   }
-  if (circular_buf_size(cbH) != 0) {
+  if (circular_buf_size(cbH) != 0)
+  {
     fprintf(stderr, "Error, Circ Buf Not Empty\n");
     exit(1);
   }
@@ -103,8 +104,6 @@ int main(int argc, char *argv[])
 
   int16_t cbstatus;
   uint8_t CBuff[CBUFFSZ];
-//  uint8_t *CBuff = malloc(CBUFSZ * sizeof(uint8_t));
-//  cbuf_handle_t cb = circular_buf_init(CBuff, CBUFFSZ);
   cbuf_handle_t cb = circular_buf_init(CBuff, CBUFFSZ);
   bool full = circular_buf_full(cb);
   bool empty = circular_buf_empty(cb);
@@ -121,7 +120,7 @@ int main(int argc, char *argv[])
   if (argc == 2)
   {
     targetBytes = 8184 * atoi(argv[1]); // number of milliseconds to record
-    sampleTime = (float) (targetBytes / 8184) / 1000;
+    sampleTime = (float)(targetBytes / 8184) / 1000;
     // targetBytes = 16368 * atoi(argv[1]);
   }
   else
@@ -133,10 +132,7 @@ int main(int argc, char *argv[])
   /* After Arguments Parsed, Open [Optional] Files */
   RAW = fopen("L1IFDATA.raw", "wb");
   fprintf(stderr, "Looking for %d Bytes (N*8184) %6.3f sec\n",
-   targetBytes, sampleTime);
-  // ftS = FT_OpenEx("A", FT_OPEN_BY_SERIAL_NUMBER, &fthandle1);
-  // ftS = FT_OpenEx("GPS4WEIT9", FT_OPEN_BY_SERIAL_NUMBER, &fthandle1);
-  // ftS = FT_OpenEx("USB<->GPS", FT_OPEN_BY_DESCRIPTION, &fthandle1);
+          targetBytes, sampleTime);
   ftS = FT_Open(0, &ftH);
   if (ftS != FT_OK)
   {
@@ -158,7 +154,6 @@ int main(int argc, char *argv[])
   {
     // FT_Purge failed
   }
-  // FT_Close(fthandle1); // Don't close it, just purge it.
 
   ftS = FT_GetQueueStatus(ftH, &rx.CNT);
   fprintf(stderr, "Bytes In Queue: %d\n", rx.CNT);
@@ -185,8 +180,8 @@ int main(int argc, char *argv[])
           totalBytes += 1;
           if (totalBytes % 8184 == 0) // 8184 Bytes = 1 ms of data
           {
-//            fprintf(stderr, "CB Size: %zu\n", circular_buf_size(cb));
-            // Write to UDP stream or copy 1 ms of data, then put it to a file and 
+            // fprintf(stderr, "CB Size: %zu\n", circular_buf_size(cb));
+            // Write to UDP stream or copy 1 ms of data, then put it to a file and
             purgeCBUFFtoFile(RAW, cb);
             if (totalBytes == targetBytes)
               break;
@@ -196,8 +191,6 @@ int main(int argc, char *argv[])
       memset(rx.MSG, 0, rx.CNT); // May not be necessary
     }                            // end Read was not an error
   }                              // end while loop
-
-//  free(CBuff);
 
   if (FT_W32_PurgeComm(ftH, PURGE_TXCLEAR | PURGE_RXCLEAR))
     printf("\nPurging Buffers\n");
