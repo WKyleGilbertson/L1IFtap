@@ -8,7 +8,10 @@
 #include "inc/ftd2xx.h"
 #include <winsock2.h>
 #include <ws2tcpip.h>
+#include <stdlib.h>
 #include <stdint.h>
+#include <string.h>
+#include <stdbool.h>
 #include <stdio.h>
 
 #define MLEN 65536
@@ -21,7 +24,111 @@ typedef struct
   uint32_t CNT;
 } PKT;
 
-void readConfig(FT_HANDLE ftH)
+typedef struct
+{
+  FILE *ifp;
+  FILE *ofp;
+  char baseFname[64];
+  char sampFname[64];
+  char outFname[64];
+  bool logfile;
+  bool useTimeStamp;
+  uint32_t sampMS;
+} CONFIG;
+
+void fileSize(FILE *fp, uint32_t *fs)
+{
+  fseek(fp, 0L, SEEK_END);
+  *fs = ftell(fp);
+  rewind(fp);
+}
+
+void initconfig(CONFIG *cfg)
+{
+  strcpy(cfg->baseFname, "L1IFDATA");
+  strcpy(cfg->sampFname, "L1IFDATA.raw");
+  strcpy(cfg->outFname, "L1IFDTA.bin");
+  cfg->logfile = false;
+  cfg->useTimeStamp = false;
+  cfg->sampMS = 1;
+}
+
+void processArgs(int argc, char *argv[], CONFIG *cfg)
+{
+  static int i, ch = ' ';
+  static char *usage =
+      "usage: L1IFtap [ms] [options]\n"
+      "       ms            how many milliseconds of data to collect\n"
+      "       -l [filename] log raw data rather than binary interpretation\n"
+      "       -r filename   read raw log file and translate to binary\n"
+      "       -t            use time tag for file name instead of default\n"
+      "       -?|h          show this usage infomation message\n"
+      "  defaults: 1 ms of data logged in binary format as L1IFDATA.bin\n";
+
+  if (argc > 1)
+  {
+    printf("%d %c\n", argc, argv[1][1]);
+    for (i = 1; i < argc; i++)
+    {
+      if (argv[i][0] == '-')
+      {
+        ch = argv[i][1];
+        switch (ch)
+        {
+        case '?':
+          printf("%s", usage);
+          exit(0);
+          break;
+        case 'h':
+          printf("%s", usage);
+          exit(0);
+          break;
+        case 'l':
+          if (((i + 1) < argc) && (argv[i + 1][0] != '-'))
+          {
+            strcpy(cfg->outFname, argv[++i]);
+          }
+          else
+          {
+/* Check for -t to use time tag name */
+//            printf("%s", usage);
+//            exit(1);
+          }
+          cfg->logfile = true;
+          break;
+        case 'r':
+          if (((i + 1) < argc) && (argv[i + 1][0] != '-'))
+          {
+            strcpy(cfg->sampFname, argv[++i]);
+          }
+          else
+          {
+            printf("%s", usage);
+            exit(1);
+          }
+          cfg->logfile = true;
+          break;
+        default:
+          printf("%s", usage);
+          // exit(0);
+          break;
+        }
+      }
+      else
+      {
+        cfg->sampMS = atoi(argv[i]);
+        printf("ms:%d\n", cfg->sampMS);
+      }
+    }
+  }
+  else // argc not greater than 1
+  {
+    printf("Do I need this? Default params\n");
+    cfg->sampMS = 1;
+  }
+}
+
+void readFTDIConfig(FT_HANDLE ftH)
 {
   FT_STATUS ftS;
   FT_PROGRAM_DATA ftData;
@@ -71,7 +178,8 @@ void readConfig(FT_HANDLE ftH)
     }
   }
 
-  fprintf(stderr, "Desc:%s SN:%s \n", ftData.Description, ftData.SerialNumber);
+  fprintf(stderr, "%s %s SN:%s \n", ftData.Description, ftData.Manufacturer,
+          ftData.SerialNumber);
 }
 
 void purgeCBUFFtoFile(FILE *fp, cbuf_handle_t cbH)
@@ -100,6 +208,8 @@ int main(int argc, char *argv[])
   FT_HANDLE ftH;
   FT_STATUS ftS;
 
+  CONFIG cnfg;
+
   WSADATA wsaData;
 
   int iResult; // WSA
@@ -126,8 +236,15 @@ int main(int argc, char *argv[])
 
   memset(rx.MSG, 0, 65536);
 
+  initconfig(&cnfg);
+  processArgs(argc, argv, &cnfg);
+  printf("%s %s %s ", cnfg.baseFname, cnfg.outFname, cnfg.sampFname);
+  printf("Raw? %s\n", cnfg.logfile == true ? "yes" : "no");
 
-  /* Insert Argument Parser Here */
+  targetBytes = 8184 * cnfg.sampMS;
+  sampleTime = (float)(targetBytes / 8184) / 1000;
+
+  /* Insert Argument Parser Here *
   if (argc == 2)
   {
     targetBytes = 8184 * atoi(argv[1]); // number of milliseconds to record
@@ -139,9 +256,11 @@ int main(int argc, char *argv[])
     targetBytes = 65472; // 65472 is 8 ms of data
     // targetBytes = 130944; // 65472 is 8 ms of data
   }
+*/
 
   /* After Arguments Parsed, Open [Optional] Files */
   RAW = fopen("L1IFDATA.raw", "wb");
+
   fprintf(stderr, "Looking for %d Bytes (N*8184) %6.3f sec\n",
           targetBytes, sampleTime);
   ftS = FT_Open(0, &ftH);
@@ -152,13 +271,14 @@ int main(int argc, char *argv[])
   }
 
   /* If using UDP, set it up */
-  iResult = WSAStartup(MAKEWORD(2,2), &wsaData);
-  if (iResult != 0) {
+  iResult = WSAStartup(MAKEWORD(2, 2), &wsaData);
+  if (iResult != 0)
+  {
     fprintf(stderr, "WSAStartup failed: %d\n", iResult);
     return 1;
   }
 
-  readConfig(ftH);
+  readFTDIConfig(ftH);
   /* */
   ftS = FT_GetQueueStatus(ftH, &rx.CNT);
   fprintf(stderr, "Bytes In Queue: %d   ", rx.CNT);
@@ -214,4 +334,6 @@ int main(int argc, char *argv[])
     printf("\nPurging Buffers\n");
   ftS = FT_Close(ftH);
   fclose(RAW);
+  WSACleanup();
+  return 0;
 }
