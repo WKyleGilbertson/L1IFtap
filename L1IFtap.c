@@ -31,6 +31,7 @@ typedef struct
   char baseFname[64];
   char sampFname[64];
   char outFname[64];
+  bool convertFile;
   bool logfile;
   bool useTimeStamp;
   uint32_t sampMS;
@@ -43,11 +44,28 @@ void fileSize(FILE *fp, uint32_t *fs)
   rewind(fp);
 }
 
+char *TimeNow(char *TimeString)
+{
+  SYSTEMTIME st;
+  GetSystemTime(&st);
+  sprintf(TimeString, "%.2d:%.2d:%.2d.%.3d",
+          st.wHour, st.wMinute, st.wSecond, st.wMilliseconds);
+  return TimeString;
+}
+
+void ISO9601(char *TimeString)
+{
+  SYSTEMTIME st;
+  GetSystemTime(&st);
+  sprintf(TimeString, "%.4d%.2d%.2dT%.2d%.2d%.2dZ",
+          st.wYear, st.wMonth, st.wDay, st.wHour, st.wMinute, st.wSecond);
+}
+
 void initconfig(CONFIG *cfg)
 {
   strcpy(cfg->baseFname, "L1IFDATA");
   strcpy(cfg->sampFname, "L1IFDATA.raw");
-  strcpy(cfg->outFname, "L1IFDTA.bin");
+  strcpy(cfg->outFname, "L1IFDATA.bin");
   cfg->logfile = false;
   cfg->useTimeStamp = false;
   cfg->sampMS = 1;
@@ -59,15 +77,16 @@ void processArgs(int argc, char *argv[], CONFIG *cfg)
   static char *usage =
       "usage: L1IFtap [ms] [options]\n"
       "       ms            how many milliseconds of data to collect\n"
+      "       -f <filename> write to a different filename than the default\n"
       "       -l [filename] log raw data rather than binary interpretation\n"
-      "       -r filename   read raw log file and translate to binary\n"
+      "       -r <filename> read raw log file and translate to binary\n"
       "       -t            use time tag for file name instead of default\n"
       "       -?|h          show this usage infomation message\n"
       "  defaults: 1 ms of data logged in binary format as L1IFDATA.bin\n";
 
   if (argc > 1)
   {
-    printf("%d %c\n", argc, argv[1][1]);
+    //    printf("%d %c\n", argc, argv[1][1]);
     for (i = 1; i < argc; i++)
     {
       if (argv[i][0] == '-')
@@ -83,6 +102,17 @@ void processArgs(int argc, char *argv[], CONFIG *cfg)
           printf("%s", usage);
           exit(0);
           break;
+        case 'f':
+          if (((i + 1) < argc) && (argv[i + 1][0] != '-'))
+          {
+            strcpy(cfg->outFname, argv[++i]);
+          }
+          else
+          {
+            printf("%s", usage);
+            exit(1);
+          }
+          break;
         case 'l':
           if (((i + 1) < argc) && (argv[i + 1][0] != '-'))
           {
@@ -90,9 +120,7 @@ void processArgs(int argc, char *argv[], CONFIG *cfg)
           }
           else
           {
-/* Check for -t to use time tag name */
-//            printf("%s", usage);
-//            exit(1);
+            strcpy(cfg->outFname, cfg->sampFname);
           }
           cfg->logfile = true;
           break;
@@ -106,25 +134,43 @@ void processArgs(int argc, char *argv[], CONFIG *cfg)
             printf("%s", usage);
             exit(1);
           }
-          cfg->logfile = true;
+          cfg->convertFile = true;
+          cfg->sampMS = 0;
+          break;
+        case 't':
+          cfg->useTimeStamp = true;
+          ISO9601(cfg->baseFname);
+          printf("%s\n", cfg->baseFname);
           break;
         default:
           printf("%s", usage);
-          // exit(0);
+          exit(0);
           break;
         }
       }
       else
       {
         cfg->sampMS = atoi(argv[i]);
-        printf("ms:%d\n", cfg->sampMS);
+        //        printf("ms:%d\n", cfg->sampMS);
       }
     }
   }
   else // argc not greater than 1
   {
-    printf("Do I need this? Default params\n");
+    //    printf("Do I need this? Default params\n");
     cfg->sampMS = 1;
+  }
+  if (cfg->useTimeStamp == true)
+  {
+    strcpy(cfg->outFname, cfg->baseFname);
+    if (cfg->logfile == true)
+    {
+      strcat(cfg->outFname, ".raw");
+    }
+    else
+    {
+      strcat(cfg->outFname, ".bin");
+    }
   }
 }
 
@@ -182,17 +228,57 @@ void readFTDIConfig(FT_HANDLE ftH)
           ftData.SerialNumber);
 }
 
-void purgeCBUFFtoFile(FILE *fp, cbuf_handle_t cbH)
+void purgeCBUFFtoFile(FILE *fp, cbuf_handle_t cbH, bool raw)
 {
   uint8_t ch;
+  uint8_t upperNibble;
+  uint8_t lowerNibble;
+  int8_t  valueToWrite;
   uint32_t sze = circular_buf_size(cbH);
   uint32_t idx;
 
   for (idx = 0; idx < sze; idx++)
   {
     circular_buf_get(cbH, &ch);
-    fputc(ch, fp);
+    if (raw == true) {
+      fputc(ch, fp);
+    }
+    else {
+      upperNibble = (ch & 0x30) >> 4;
+      lowerNibble = (ch & 0x03);
+      switch(upperNibble) {
+        case 0x00:
+        valueToWrite = 1;
+        break;
+        case 0x01:
+        valueToWrite = 3;
+        break;
+        case 0x02:
+        valueToWrite = -1;
+        break;
+        case 0x03:
+        valueToWrite = -3;
+        break;
+      }
+      fputc(valueToWrite, fp);
+      switch(lowerNibble) {
+        case 0x00:
+        valueToWrite = 1;
+        break;
+        case 0x01:
+        valueToWrite = 3;
+        break;
+        case 0x02:
+        valueToWrite = -1;
+        break;
+        case 0x03:
+        valueToWrite = -3;
+        break;
+      }
+      fputc(valueToWrite, fp);
+    }
   }
+
   if (circular_buf_size(cbH) != 0)
   {
     fprintf(stderr, "Error, Circ Buf Not Empty\n");
@@ -238,7 +324,7 @@ int main(int argc, char *argv[])
 
   initconfig(&cnfg);
   processArgs(argc, argv, &cnfg);
-  printf("%s %s %s ", cnfg.baseFname, cnfg.outFname, cnfg.sampFname);
+  printf("base:%s out:%s samp:%s ", cnfg.baseFname, cnfg.outFname, cnfg.sampFname);
   printf("Raw? %s\n", cnfg.logfile == true ? "yes" : "no");
 
   targetBytes = 8184 * cnfg.sampMS;
@@ -259,7 +345,21 @@ int main(int argc, char *argv[])
 */
 
   /* After Arguments Parsed, Open [Optional] Files */
-  RAW = fopen("L1IFDATA.raw", "wb");
+  cnfg.ofp = fopen(cnfg.outFname, "wb");
+  /*if (cnfg.logfile == true)
+  {
+    cnfg.ofp = fopen(cnfg.outFname, "wb");
+  } */
+  // RAW = fopen("L1IFDATA.raw", "wb");
+  if (cnfg.convertFile == true)
+  {
+    cnfg.ifp = fopen(cnfg.sampFname, "rb");
+    if (cnfg.ifp == NULL)
+    {
+      printf("No such file %s\n", cnfg.sampFname);
+      exit(1);
+    }
+  }
 
   fprintf(stderr, "Looking for %d Bytes (N*8184) %6.3f sec\n",
           targetBytes, sampleTime);
@@ -320,7 +420,8 @@ int main(int argc, char *argv[])
           {
             // fprintf(stderr, "CB Size: %zu\n", circular_buf_size(cb));
             // Write to UDP stream or copy 1 ms of data, then put it to a file and
-            purgeCBUFFtoFile(RAW, cb);
+            purgeCBUFFtoFile(cnfg.ofp, cb, cnfg.logfile);
+            // purgeCBUFFtoFile(RAW, cb);
             if (totalBytes == targetBytes)
               break;
           }
@@ -333,7 +434,9 @@ int main(int argc, char *argv[])
   if (FT_W32_PurgeComm(ftH, PURGE_TXCLEAR | PURGE_RXCLEAR))
     printf("\nPurging Buffers\n");
   ftS = FT_Close(ftH);
-  fclose(RAW);
+  fclose(cnfg.ofp);
+  if (cnfg.convertFile == true)
+    fclose(cnfg.ifp);
   WSACleanup();
   return 0;
 }
