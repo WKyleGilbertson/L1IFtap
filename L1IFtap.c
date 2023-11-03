@@ -4,8 +4,9 @@
 
 #pragma comment(lib, "Ws2_32.lib")
 #pragma comment(lib, "lib/FTD2XX.lib")
-#include "inc/circular_buffer.h"
 #include "inc/ftd2xx.h"
+#include "inc/circular_buffer.h"
+#include "inc/version.h"
 #include <winsock2.h>
 #include <ws2tcpip.h>
 #include <stdlib.h>
@@ -35,6 +36,7 @@ typedef struct
   bool logfile;
   bool useTimeStamp;
   uint32_t sampMS;
+  SWV V;
 } CONFIG;
 
 void fileSize(FILE *fp, uint32_t *fs)
@@ -81,8 +83,9 @@ void processArgs(int argc, char *argv[], CONFIG *cfg)
       "       -l [filename] log raw data rather than binary interpretation\n"
       "       -r <filename> read raw log file and translate to binary\n"
       "       -t            use time tag for file name instead of default\n"
+      "       -v            print version information\n"
       "       -?|h          show this usage infomation message\n"
-      "  defaults: 1 ms of data logged in binary format as L1IFDATA.bin\n";
+      "  defaults: 1 ms of data logged in binary format as L1IFDATA.bin";
 
   if (argc > 1)
   {
@@ -141,6 +144,12 @@ void processArgs(int argc, char *argv[], CONFIG *cfg)
           cfg->useTimeStamp = true;
           ISO9601(cfg->baseFname);
           printf("%s\n", cfg->baseFname);
+          break;
+        case 'v':
+          fprintf(stdout, "%s: GitCI:%s %s v%.1d.%.1d.%.1d",
+                  cfg->V.Name, cfg->V.GitCI, cfg->V.BuildDate,
+                  cfg->V.Major, cfg->V.Minor, cfg->V.Patch);
+          exit(0);
           break;
         default:
           printf("%s", usage);
@@ -233,45 +242,49 @@ void purgeCBUFFtoFile(FILE *fp, cbuf_handle_t cbH, bool raw)
   uint8_t ch;
   uint8_t upperNibble;
   uint8_t lowerNibble;
-  int8_t  valueToWrite;
+  int8_t valueToWrite;
   uint32_t sze = circular_buf_size(cbH);
   uint32_t idx;
 
   for (idx = 0; idx < sze; idx++)
   {
     circular_buf_get(cbH, &ch);
-    if (raw == true) {
+    if (raw == true)
+    {
       fputc(ch, fp);
     }
-    else {
+    else
+    {
       upperNibble = (ch & 0x30) >> 4;
       lowerNibble = (ch & 0x03);
-      switch(upperNibble) {
-        case 0x00:
+      switch (upperNibble)
+      {
+      case 0x00:
         valueToWrite = 1;
         break;
-        case 0x01:
+      case 0x01:
         valueToWrite = 3;
         break;
-        case 0x02:
+      case 0x02:
         valueToWrite = -1;
         break;
-        case 0x03:
+      case 0x03:
         valueToWrite = -3;
         break;
       }
       fputc(valueToWrite, fp);
-      switch(lowerNibble) {
-        case 0x00:
+      switch (lowerNibble)
+      {
+      case 0x00:
         valueToWrite = 1;
         break;
-        case 0x01:
+      case 0x01:
         valueToWrite = 3;
         break;
-        case 0x02:
+      case 0x02:
         valueToWrite = -1;
         break;
-        case 0x03:
+      case 0x03:
         valueToWrite = -3;
         break;
       }
@@ -284,6 +297,56 @@ void purgeCBUFFtoFile(FILE *fp, cbuf_handle_t cbH, bool raw)
     fprintf(stderr, "Error, Circ Buf Not Empty\n");
     exit(1);
   }
+}
+
+void raw2bin(FILE * dst, FILE * src) {
+int32_t fSize = 0, idx = 0;
+uint8_t byteData = 0, upperNibble, lowerNibble;
+int8_t valueToWrite = 0;
+fileSize(src, &fSize);
+printf("Convert file size: %d\n", fSize);
+
+for (idx=0; idx<fSize; idx++) {
+    byteData = fgetc(src);
+    upperNibble = (byteData & 0x30) >> 4;
+    lowerNibble = (byteData & 0x03);
+    // switch (lowerNibble) { // FNLN
+    switch (upperNibble)
+    { // FNHN
+    case 0x00:
+      valueToWrite = 1;
+      break;
+    case 0x01:
+      valueToWrite = 3;
+      break;
+    case 0x02:
+      valueToWrite = -1;
+      break;
+    case 0x03:
+      valueToWrite = -3;
+      break;
+    }
+    fputc(valueToWrite, dst);
+    // switch(upperNibble) { //FNLN
+    switch (lowerNibble)
+    { // FNHN
+    case 0x00:
+      valueToWrite = 1;
+      break;
+    case 0x01:
+      valueToWrite = 3;
+      break;
+    case 0x02:
+      valueToWrite = -1;
+      break;
+    case 0x03:
+      valueToWrite = -3;
+      break;
+    }
+    fputc(valueToWrite, dst);
+}
+fclose(src);
+fclose(dst);
 }
 
 int main(int argc, char *argv[])
@@ -305,6 +368,7 @@ int main(int argc, char *argv[])
   char valueToWrite;
 
   uint32_t idx = 0;
+  int32_t len = 0;
   uint8_t blankLine[120];
   uint8_t ch;
 
@@ -313,6 +377,19 @@ int main(int argc, char *argv[])
   cbuf_handle_t cb = circular_buf_init(CBuff, CBUFFSZ);
   bool full = circular_buf_full(cb);
   bool empty = circular_buf_empty(cb);
+
+  cnfg.V.Major = MAJOR_VERSION;
+  cnfg.V.Minor = MINOR_VERSION;
+  cnfg.V.Patch = PATCH_VERSION;
+#ifdef CURRENT_HASH
+  strncpy(cnfg.V.GitCI, CURRENT_HASH, 40);
+#endif
+#ifdef CURRENT_DATE
+  strncpy(cnfg.V.BuildDate, CURRENT_DATE, 10);
+#endif
+#ifdef CURRENT_NAME
+  strncpy(cnfg.V.Name, CURRENT_NAME, 10);
+#endif
 
   for (idx = 0; idx < 120; idx++)
   {
@@ -345,13 +422,10 @@ int main(int argc, char *argv[])
 */
 
   /* After Arguments Parsed, Open [Optional] Files */
+  if (cnfg.convertFile == false) {
   cnfg.ofp = fopen(cnfg.outFname, "wb");
-  /*if (cnfg.logfile == true)
-  {
-    cnfg.ofp = fopen(cnfg.outFname, "wb");
-  } */
-  // RAW = fopen("L1IFDATA.raw", "wb");
-  if (cnfg.convertFile == true)
+  }
+  else
   {
     cnfg.ifp = fopen(cnfg.sampFname, "rb");
     if (cnfg.ifp == NULL)
@@ -359,6 +433,22 @@ int main(int argc, char *argv[])
       printf("No such file %s\n", cnfg.sampFname);
       exit(1);
     }
+    else {
+      len = strlen(cnfg.sampFname);
+      strcpy(cnfg.outFname, cnfg.sampFname);
+      cnfg.outFname[len-3] = '\0';
+      strcat(cnfg.outFname, "bin");
+      printf("convert %s to %s\n", cnfg.sampFname, cnfg.outFname);
+      cnfg.ofp = fopen(cnfg.outFname, "wb");
+      if (cnfg.ofp == NULL) {
+        printf("Can't open output file\n");
+        exit(1);
+      }
+      else {
+        raw2bin(cnfg.ofp, cnfg.ifp);
+      }
+    }
+    exit(0);
   }
 
   fprintf(stderr, "Looking for %d Bytes (N*8184) %6.3f sec\n",
