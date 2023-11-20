@@ -2,13 +2,13 @@
 #define WIN32_LEAN_AND_MEAN
 #endif
 
-#pragma comment(lib, "Ws2_32.lib")
+//#pragma comment(lib, "Ws2_32.lib")
 #pragma comment(lib, "lib/FTD2XX.lib")
 #include "inc/ftd2xx.h"
 #include "inc/circular_buffer.h"
 #include "inc/version.h"
-#include <winsock2.h>
-#include <ws2tcpip.h>
+//#include <winsock2.h>
+//#include <ws2tcpip.h>
 #include <stdlib.h>
 #include <stdint.h>
 #include <string.h>
@@ -39,13 +39,14 @@ typedef struct
   SWV V;
 } CONFIG;
 
-void fileSize(FILE *fp, uint32_t *fs)
+void fileSize(FILE *fp, int32_t *fs)
 {
   fseek(fp, 0L, SEEK_END);
   *fs = ftell(fp);
   rewind(fp);
 }
 
+/*
 char *TimeNow(char *TimeString)
 {
   SYSTEMTIME st;
@@ -62,6 +63,7 @@ void ISO9601(char *TimeString)
   sprintf(TimeString, "%.4d%.2d%.2dT%.2d%.2d%.2dZ",
           st.wYear, st.wMonth, st.wDay, st.wHour, st.wMinute, st.wSecond);
 }
+*/
 
 void initconfig(CONFIG *cfg)
 {
@@ -142,7 +144,7 @@ void processArgs(int argc, char *argv[], CONFIG *cfg)
           break;
         case 't':
           cfg->useTimeStamp = true;
-          ISO9601(cfg->baseFname);
+         // ISO9601(cfg->baseFname); // Need to fix this
           printf("%s\n", cfg->baseFname);
           break;
         case 'v':
@@ -220,6 +222,7 @@ void readFTDIConfig(FT_HANDLE ftH)
   else
     fprintf(stderr, "Not Okay? %d\n", ftS);
 
+  /* Don't need COM port number.... ?
   ftS = FT_GetComPortNumber(ftH, &lComPortNumber);
   if (ftS == FT_OK)
   {
@@ -231,7 +234,7 @@ void readFTDIConfig(FT_HANDLE ftH)
     {
       fprintf(stderr, "COM Port: %d ", lComPortNumber);
     }
-  }
+  } */
 
   fprintf(stderr, "%s %s SN:%s \n", ftData.Description, ftData.Manufacturer,
           ftData.SerialNumber);
@@ -359,9 +362,9 @@ int main(int argc, char *argv[])
 
   CONFIG cnfg;
 
-  WSADATA wsaData;
+//  WSADATA wsaData;
 
-  int iResult; // WSA
+//  int iResult; // WSA
   float sampleTime = 0.0;
   unsigned long i = 0, totalBytes = 0, targetBytes = 0;
   unsigned char sampleValue;
@@ -385,7 +388,7 @@ int main(int argc, char *argv[])
   strncpy(cnfg.V.GitCI, CURRENT_HASH, 40);
 #endif
 #ifdef CURRENT_DATE
-  strncpy(cnfg.V.BuildDate, CURRENT_DATE, 10);
+  strncpy(cnfg.V.BuildDate, CURRENT_DATE, 16);
 #endif
 #ifdef CURRENT_NAME
   strncpy(cnfg.V.Name, CURRENT_NAME, 10);
@@ -451,7 +454,7 @@ int main(int argc, char *argv[])
     exit(0);
   }
 
-  fprintf(stderr, "Looking for %d Bytes (N*8184) %6.3f sec\n",
+  fprintf(stderr, "Looking for %ld Bytes (N*8184) %6.3f sec\n",
           targetBytes, sampleTime);
   ftS = FT_Open(0, &ftH);
   if (ftS != FT_OK)
@@ -460,13 +463,13 @@ int main(int argc, char *argv[])
     exit(1);
   }
 
-  /* If using UDP, set it up */
+  /* If using UDP, set it up 
   iResult = WSAStartup(MAKEWORD(2, 2), &wsaData);
   if (iResult != 0)
   {
     fprintf(stderr, "WSAStartup failed: %d\n", iResult);
     return 1;
-  }
+  } */
 
   readFTDIConfig(ftH);
   /* */
@@ -527,6 +530,6 @@ int main(int argc, char *argv[])
   fclose(cnfg.ofp);
   if (cnfg.convertFile == true)
     fclose(cnfg.ifp);
-  WSACleanup();
+//  WSACleanup();
   return 0;
 }
