@@ -9,12 +9,16 @@
 #include "inc/version.h"
 //#include <winsock2.h>
 //#include <ws2tcpip.h>
-//#include <sys/time.h>
 #include <stdlib.h>
 #include <stdint.h>
 #include <string.h>
 #include <stdbool.h>
 #include <stdio.h>
+#if !defined(_WIN32) && (defined(__UNIX__) || (defined(__APPLE__)))
+#include <time.h>
+#include <sys/time.h>
+#include "inc/WinTypes.h"
+#endif
 
 #define MLEN 65536
 #define CBUFFSZ 32768
@@ -47,15 +51,17 @@ void fileSize(FILE *fp, int32_t *fs)
   rewind(fp);
 }
 
-/*
+#if !defined(_WIN32)
 void getISO8601(char datetime[17])
 {
 	struct timeval curTime;
 	gettimeofday(&curTime, NULL);
 	strftime(datetime, 17, "%Y%m%dT%H%M%SZ", gmtime(&curTime.tv_sec));
 //	return (datetime);
-} */
+} 
+#endif
 
+#if defined(_WIN32)
 char *TimeNow(char *TimeString)
 {
   SYSTEMTIME st;
@@ -65,14 +71,14 @@ char *TimeNow(char *TimeString)
   return TimeString;
 }
 
-void ISO9601(char *TimeString)
+void ISO8601(char *TimeString)
 {
   SYSTEMTIME st;
   GetSystemTime(&st);
   sprintf(TimeString, "%.4d%.2d%.2dT%.2d%.2d%.2dZ",
           st.wYear, st.wMonth, st.wDay, st.wHour, st.wMinute, st.wSecond);
 }
-
+#endif
 
 void initconfig(CONFIG *cfg)
 {
@@ -153,8 +159,12 @@ void processArgs(int argc, char *argv[], CONFIG *cfg)
           break;
         case 't':
           cfg->useTimeStamp = true;
-          ISO9601(cfg->baseFname); // Need to fix this
-         //getISO8601(cfg->baseFname); // Need to fix this
+          #if defined(_WIN32)
+          ISO8601(cfg->baseFname); // Need to fix this
+          #endif
+          #if !defined(_WIN32)
+         getISO8601(cfg->baseFname); // Need to fix this
+         #endif
           printf("%s\n", cfg->baseFname);
           break;
         case 'v':
