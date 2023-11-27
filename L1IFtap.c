@@ -84,7 +84,7 @@ void ISO8601(char *TimeString)
   sprintf(TimeString, "%.4d%.2d%.2dT%.2d%.2d%.2dZ",
           st.wYear, st.wMonth, st.wDay, st.wHour, st.wMinute, st.wSecond);
 }
-#endif#endif
+#endif
 
 void initconfig(CONFIG *cfg)
 {
