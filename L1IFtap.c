@@ -2,19 +2,24 @@
 #define WIN32_LEAN_AND_MEAN
 #endif
 
-//#pragma comment(lib, "Ws2_32.lib")
+// #pragma comment(lib, "Ws2_32.lib")
 #pragma comment(lib, "lib/FTD2XX.lib")
 #include "inc/ftd2xx.h"
 #include "inc/circular_buffer.h"
 #include "inc/version.h"
-//#include <winsock2.h>
-//#include <ws2tcpip.h>
-//#include <sys/time.h>
+// #include <winsock2.h>
+// #include <ws2tcpip.h>
 #include <stdlib.h>
 #include <stdint.h>
 #include <string.h>
 #include <stdbool.h>
 #include <stdio.h>
+
+#if !defined(_WIN32) && (defined(__UNIX__) || (defined(__APPLE)))
+#include <time.h>
+#include <sys/time.h>
+#include "inc/WinTypes.h"
+#endif
 
 #define MLEN 65536
 #define CBUFFSZ 32768
@@ -47,15 +52,16 @@ void fileSize(FILE *fp, int32_t *fs)
   rewind(fp);
 }
 
-/*
+#if !defined(_WIN32)
 void getISO8601(char datetime[17])
 {
-	struct timeval curTime;
-	gettimeofday(&curTime, NULL);
-	strftime(datetime, 17, "%Y%m%dT%H%M%SZ", gmtime(&curTime.tv_sec));
-//	return (datetime);
-} */
+  struct timeval curTime;
+  gettimeofday(&curTime, NULL);
+  strftime(datetime, 17, "%Y%m%dT%H%M%SZ", gmtime(&curTime.tv_sec));
+}
+#endif
 
+#if defined(_WIN32)
 char *TimeNow(char *TimeString)
 {
   SYSTEMTIME st;
@@ -65,14 +71,14 @@ char *TimeNow(char *TimeString)
   return TimeString;
 }
 
-void ISO9601(char *TimeString)
+void ISO8601(char *TimeString)
 {
   SYSTEMTIME st;
   GetSystemTime(&st);
   sprintf(TimeString, "%.4d%.2d%.2dT%.2d%.2d%.2dZ",
           st.wYear, st.wMonth, st.wDay, st.wHour, st.wMinute, st.wSecond);
 }
-
+#endif
 
 void initconfig(CONFIG *cfg)
 {
@@ -153,8 +159,15 @@ void processArgs(int argc, char *argv[], CONFIG *cfg)
           break;
         case 't':
           cfg->useTimeStamp = true;
-          ISO9601(cfg->baseFname); // Need to fix this
-         //getISO8601(cfg->baseFname); // Need to fix this
+          printf("Use Time Stamp Filename\n");
+#if !defined(_WIN32)
+          getISO8601(cfg->baseFname); // Need to fix this
+          printf("Mac\n");
+#endif
+#if defined(_WIN32)
+          ISO8601(cfg->baseFname); // Need to fix this
+          printf("Win\n");
+#endif
           printf("%s\n", cfg->baseFname);
           break;
         case 'v':
@@ -312,14 +325,16 @@ void purgeCBUFFtoFile(FILE *fp, cbuf_handle_t cbH, bool raw)
   }
 }
 
-void raw2bin(FILE * dst, FILE * src) {
-int32_t fSize = 0, idx = 0;
-uint8_t byteData = 0, upperNibble, lowerNibble;
-int8_t valueToWrite = 0;
-fileSize(src, &fSize);
-printf("Convert file size: %d\n", fSize);
+void raw2bin(FILE *dst, FILE *src)
+{
+  int32_t fSize = 0, idx = 0;
+  uint8_t byteData = 0, upperNibble, lowerNibble;
+  int8_t valueToWrite = 0;
+  fileSize(src, &fSize);
+  printf("Convert file size: %d\n", fSize);
 
-for (idx=0; idx<fSize; idx++) {
+  for (idx = 0; idx < fSize; idx++)
+  {
     byteData = fgetc(src);
     upperNibble = (byteData & 0x30) >> 4;
     lowerNibble = (byteData & 0x03);
@@ -357,9 +372,9 @@ for (idx=0; idx<fSize; idx++) {
       break;
     }
     fputc(valueToWrite, dst);
-}
-fclose(src);
-fclose(dst);
+  }
+  fclose(src);
+  fclose(dst);
 }
 
 int main(int argc, char *argv[])
@@ -372,9 +387,9 @@ int main(int argc, char *argv[])
 
   CONFIG cnfg;
 
-//  WSADATA wsaData;
+  //  WSADATA wsaData;
 
-//  int iResult; // WSA
+  //  int iResult; // WSA
   float sampleTime = 0.0;
   unsigned long i = 0, totalBytes = 0, targetBytes = 0;
   unsigned char sampleValue;
@@ -435,8 +450,9 @@ int main(int argc, char *argv[])
 */
 
   /* After Arguments Parsed, Open [Optional] Files */
-  if (cnfg.convertFile == false) {
-  cnfg.ofp = fopen(cnfg.outFname, "wb");
+  if (cnfg.convertFile == false)
+  {
+    cnfg.ofp = fopen(cnfg.outFname, "wb");
   }
   else
   {
@@ -446,18 +462,21 @@ int main(int argc, char *argv[])
       printf("No such file %s\n", cnfg.sampFname);
       exit(1);
     }
-    else {
+    else
+    {
       len = strlen(cnfg.sampFname);
       strcpy(cnfg.outFname, cnfg.sampFname);
-      cnfg.outFname[len-3] = '\0';
+      cnfg.outFname[len - 3] = '\0';
       strcat(cnfg.outFname, "bin");
       printf("convert %s to %s\n", cnfg.sampFname, cnfg.outFname);
       cnfg.ofp = fopen(cnfg.outFname, "wb");
-      if (cnfg.ofp == NULL) {
+      if (cnfg.ofp == NULL)
+      {
         printf("Can't open output file\n");
         exit(1);
       }
-      else {
+      else
+      {
         raw2bin(cnfg.ofp, cnfg.ifp);
       }
     }
@@ -473,7 +492,7 @@ int main(int argc, char *argv[])
     exit(1);
   }
 
-  /* If using UDP, set it up 
+  /* If using UDP, set it up
   iResult = WSAStartup(MAKEWORD(2, 2), &wsaData);
   if (iResult != 0)
   {
@@ -540,6 +559,6 @@ int main(int argc, char *argv[])
   fclose(cnfg.ofp);
   if (cnfg.convertFile == true)
     fclose(cnfg.ifp);
-//  WSACleanup();
+  //  WSACleanup();
   return 0;
 }
