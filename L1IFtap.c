@@ -9,6 +9,7 @@
 #include "inc/version.h"
 //#include <winsock2.h>
 //#include <ws2tcpip.h>
+#include <sys/time.h>
 #include <stdlib.h>
 #include <stdint.h>
 #include <string.h>
@@ -46,6 +47,13 @@ void fileSize(FILE *fp, int32_t *fs)
   rewind(fp);
 }
 
+void getISO8601(char datetime[17])
+{
+	struct timeval curTime;
+	gettimeofday(&curTime, NULL);
+	strftime(datetime, 17, "%Y%m%dT%H%M%SZ", gmtime(&curTime.tv_sec));
+//	return (datetime);
+}
 /*
 char *TimeNow(char *TimeString)
 {
@@ -145,6 +153,7 @@ void processArgs(int argc, char *argv[], CONFIG *cfg)
         case 't':
           cfg->useTimeStamp = true;
          // ISO9601(cfg->baseFname); // Need to fix this
+         getISO8601(cfg->baseFname); // Need to fix this
           printf("%s\n", cfg->baseFname);
           break;
         case 'v':
