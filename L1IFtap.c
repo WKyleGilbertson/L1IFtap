@@ -7,8 +7,8 @@
 #include "inc/ftd2xx.h"
 #include "inc/circular_buffer.h"
 #include "inc/version.h"
-// #include <winsock2.h>
-// #include <ws2tcpip.h>
+//#include <winsock2.h>
+//#include <ws2tcpip.h>
 #include <stdlib.h>
 #include <stdint.h>
 #include <string.h>
@@ -16,6 +16,11 @@
 #include <stdio.h>
 
 #if !defined(_WIN32) && (defined(__UNIX__) || (defined(__APPLE)))
+#include <time.h>
+#include <sys/time.h>
+#include "inc/WinTypes.h"
+#endif
+#if !defined(_WIN32) && (defined(__UNIX__) || (defined(__APPLE__)))
 #include <time.h>
 #include <sys/time.h>
 #include "inc/WinTypes.h"
@@ -55,10 +60,11 @@ void fileSize(FILE *fp, int32_t *fs)
 #if !defined(_WIN32)
 void getISO8601(char datetime[17])
 {
-  struct timeval curTime;
-  gettimeofday(&curTime, NULL);
-  strftime(datetime, 17, "%Y%m%dT%H%M%SZ", gmtime(&curTime.tv_sec));
-}
+	struct timeval curTime;
+	gettimeofday(&curTime, NULL);
+	strftime(datetime, 17, "%Y%m%dT%H%M%SZ", gmtime(&curTime.tv_sec));
+//	return (datetime);
+} 
 #endif
 
 #if defined(_WIN32)
@@ -78,7 +84,7 @@ void ISO8601(char *TimeString)
   sprintf(TimeString, "%.4d%.2d%.2dT%.2d%.2d%.2dZ",
           st.wYear, st.wMonth, st.wDay, st.wHour, st.wMinute, st.wSecond);
 }
-#endif
+#endif#endif
 
 void initconfig(CONFIG *cfg)
 {
@@ -159,15 +165,12 @@ void processArgs(int argc, char *argv[], CONFIG *cfg)
           break;
         case 't':
           cfg->useTimeStamp = true;
-          printf("Use Time Stamp Filename\n");
-#if !defined(_WIN32)
-          getISO8601(cfg->baseFname); // Need to fix this
-          printf("Mac\n");
-#endif
-#if defined(_WIN32)
+          #if defined(_WIN32)
           ISO8601(cfg->baseFname); // Need to fix this
-          printf("Win\n");
-#endif
+          #endif
+          #if !defined(_WIN32)
+         getISO8601(cfg->baseFname); // Need to fix this
+         #endif
           printf("%s\n", cfg->baseFname);
           break;
         case 'v':
