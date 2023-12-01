@@ -258,6 +258,8 @@ void readFTDIConfig(FT_CFG *cfg)
   {
     fprintf(stderr, "FTDI Get Com Port Failed! %d\n", ftS);
   }
+ ftS = FT_SetLatencyTimer(cfg->ftH, 2);
+ ftS = FT_SetUSBParameters(cfg->ftH, 0x10000, 0x10000);
 }
 
 void purgeCBUFFtoFile(FILE *fp, cbuf_handle_t cbH, bool raw, bool FNHN)
