@@ -486,7 +486,7 @@ int main(int argc, char *argv[])
   targetBytes = BYTESPERMS * cnfg.sampMS;
   sampleTime = (float)(targetBytes / BYTESPERMS) / MSPERSEC;
 
-  fprintf(stdout, "%d ms requested.\n", cnfg.sampMS);
+  //  fprintf(stdout, "%d ms requested.\n", cnfg.sampMS);
   fprintf(stdout, "Collecting %10lu Bytes (Nms*8184) [%6.3f sec] in %s\n",
           targetBytes, sampleTime, cnfg.outFname);
 
@@ -546,9 +546,9 @@ int main(int argc, char *argv[])
   while (totalBytes < targetBytes)
   {
     ftS = FT_GetQueueStatus(cnfg.ftC.ftH, &rx.CNT);
-    printf("%s", blankLine);
-    printf("Collected: %10lu Bytes [%10lu remaining with %5d in queue]",
-     totalBytes, targetBytes - totalBytes, rx.CNT);
+    fprintf(stdout, "%s", blankLine);
+    fprintf(stdout, "Collected: %10lu Bytes [%10lu bytes to go with %5d in queue]",
+            totalBytes, targetBytes - totalBytes, rx.CNT);
     rx.SZE = rx.CNT; // tell it you want the whole buffer
     ftS = FT_Read(cnfg.ftC.ftH, rx.MSG, rx.SZE, &rx.CNT);
     if (ftS != FT_OK)
@@ -579,7 +579,10 @@ int main(int argc, char *argv[])
   }                              // end while loop
 
   if (FT_W32_PurgeComm(cnfg.ftC.ftH, PURGE_TXCLEAR | PURGE_RXCLEAR))
-    printf("\nPurging Buffers\n");
+  {
+    fprintf(stdout, "\n\t   %10lu Bytes written to %s",
+            totalBytes, cnfg.outFname);
+  }
   ftS = FT_Close(cnfg.ftC.ftH);
   fclose(cnfg.ofp);
 #ifdef WINUDP
