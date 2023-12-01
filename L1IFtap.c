@@ -22,7 +22,9 @@
 
 #define MLEN 65536
 #define CBUFFSZ 32768
-#define DEBUG
+#define BYTESPERMS 8184
+#define MSPERSEC 1000
+//#define DEBUG
 
 typedef struct
 {
@@ -30,6 +32,14 @@ typedef struct
   uint32_t SZE;
   uint32_t CNT;
 } PKT;
+
+typedef struct
+{
+  int32_t lComPortNumber;
+  uint32_t ftDriverVer;
+  FT_PROGRAM_DATA ftData;
+  FT_HANDLE ftH;
+} FT_CFG;
 
 typedef struct
 {
@@ -43,6 +53,7 @@ typedef struct
   bool useTimeStamp;
   bool FNHN;
   uint32_t sampMS;
+  FT_CFG ftC;
   SWV V;
 } CONFIG;
 
@@ -216,59 +227,33 @@ void processArgs(int argc, char *argv[], CONFIG *cfg)
   }
 }
 
-void readFTDIConfig(FT_HANDLE ftH)
+void readFTDIConfig(FT_CFG *cfg)
 {
   FT_STATUS ftS;
-  FT_PROGRAM_DATA ftData;
-  uint32_t ftDriverVer;
-  int32_t lComPortNumber;
-  char ManufacturerBuf[32];
-  char ManufacturerIdBuf[16];
-  char DescriptionBuf[64];
-  char SerialNumberBuf[16];
+  ftS = FT_GetDriverVersion(cfg->ftH, &cfg->ftDriverVer);
+  if (ftS != FT_OK)
+  {
+    fprintf(stderr, "Couldn't read FTDI driver version.\n");
+  }
 
-  ftData.Signature1 = 0x00000000;
-  ftData.Signature2 = 0xffffffff;
-  ftData.Version = 0x00000003; // 2232H extensions
-  ftData.Manufacturer = ManufacturerBuf;
-  ftData.ManufacturerId = ManufacturerIdBuf;
-  ftData.Description = DescriptionBuf;
-  ftData.SerialNumber = SerialNumberBuf;
-
-  ftS = FT_GetDriverVersion(ftH, &ftDriverVer);
-  if (ftS == FT_OK)
-    fprintf(stderr, "ftDrvr:0x%x  ", ftDriverVer);
-
-  ftS = FT_SetTimeouts(ftH, 500, 500);
+  ftS = FT_SetTimeouts(cfg->ftH, 500, 500);
   if (ftS != FT_OK)
   {
     fprintf(stderr, "timeout A status not ok %d\n", ftS);
     exit(1);
   }
 
-  ftS = FT_EE_Read(ftH, &ftData);
-  if (ftS == FT_OK)
-    fprintf(stderr, "FIFO:%s  ",
-            (ftData.IFAIsFifo7 != 0) ? "Yes" : "No");
-  else
-    fprintf(stderr, "Not Okay? %d\n", ftS);
-
-  /* Don't need COM port number.... ?
-  ftS = FT_GetComPortNumber(ftH, &lComPortNumber);
-  if (ftS == FT_OK)
+  ftS = FT_EE_Read(cfg->ftH, &cfg->ftData);
+  if (ftS != FT_OK)
   {
-    if (lComPortNumber == -1)
-    {
-      fprintf(stderr, "No COM port assigned\n");
-    }
-    else
-    {
-      fprintf(stderr, "COM Port: %d ", lComPortNumber);
-    }
-  } */
+    fprintf(stderr, "FTDI EE Read did not succeed! %d\n", ftS);
+  }
 
-  fprintf(stderr, "%s %s SN:%s \n", ftData.Description, ftData.Manufacturer,
-          ftData.SerialNumber);
+  ftS = FT_GetComPortNumber(cfg->ftH, &cfg->lComPortNumber);
+  if (ftS != FT_OK)
+  {
+    fprintf(stderr, "FTDI Get Com Port Failed! %d\n", ftS);
+  }
 }
 
 void purgeCBUFFtoFile(FILE *fp, cbuf_handle_t cbH, bool raw, bool FNHN)
@@ -339,7 +324,7 @@ void raw2bin(FILE *dst, FILE *src, bool FNHN)
   uint8_t byteData = 0, upperNibble, lowerNibble;
   int8_t valueToWrite = 0;
   fileSize(src, &fSize);
-//  printf("Convert file size: %d\n", fSize);
+  //  printf("Convert file size: %d\n", fSize);
 
   for (idx = 0; idx < fSize; idx++)
   {
@@ -383,16 +368,50 @@ void raw2bin(FILE *dst, FILE *src, bool FNHN)
   fclose(dst);
 }
 
+void convertFile(CONFIG *cfg)
+{
+  cfg->ifp = fopen(cfg->sampFname, "rb");
+  if (cfg->ifp == NULL)
+  {
+    fprintf(stderr, "No such file %s\n", cfg->sampFname);
+    exit(1);
+  }
+  else
+  {
+    cfg->ofp = fopen(cfg->outFname, "wb");
+    if (cfg->ofp == NULL)
+    {
+      fprintf(stderr, "Can't open output file\n");
+      exit(1);
+    }
+    else
+    {
+      raw2bin(cfg->ofp, cfg->ifp, cfg->FNHN);
+    }
+  }
+  fclose(cfg->ifp);
+  fclose(cfg->ofp);
+  exit(0);
+}
+
 int main(int argc, char *argv[])
 {
-  FILE *RAW;
-  PKT rx;
-
-  FT_HANDLE ftH;
-  FT_STATUS ftS;
-
   CONFIG cnfg;
+  char ManufacturerBuf[32];
+  char ManufacturerIdBuf[16];
+  char DescriptionBuf[64];
+  char SerialNumberBuf[16];
 
+  cnfg.ftC.ftData.Signature1     = 0x00000000;
+  cnfg.ftC.ftData.Signature2     = 0xffffffff;
+  cnfg.ftC.ftData.Version        = 0x00000003;        // 2232H extensions
+  cnfg.ftC.ftData.Manufacturer   = ManufacturerBuf;
+  cnfg.ftC.ftData.ManufacturerId = ManufacturerIdBuf;
+  cnfg.ftC.ftData.Description    = DescriptionBuf;
+  cnfg.ftC.ftData.SerialNumber   = SerialNumberBuf;
+
+  PKT rx;
+  FT_STATUS ftS;
   //  WSADATA wsaData;
   //  int iResult; // WSA
   float sampleTime = 0.0;
@@ -435,11 +454,16 @@ int main(int argc, char *argv[])
   initconfig(&cnfg);
   processArgs(argc, argv, &cnfg);
 
-#ifdef DEBUG
   if (cnfg.convertFile == true)
   {
     fprintf(stdout, "%s -> %s\n", cnfg.sampFname, cnfg.outFname);
+    convertFile(&cnfg);
   }
+  else
+  {
+    cnfg.ofp = fopen(cnfg.outFname, "wb");
+  }
+#ifdef DEBUG
   fprintf(stdout, "base:%s out:%s samp:%s ",
           cnfg.baseFname, cnfg.outFname, cnfg.sampFname);
   fprintf(stdout, "Raw? %s, TS:%s CF: %s FNHN? %s ",
@@ -451,42 +475,15 @@ int main(int argc, char *argv[])
 #endif
 
   /* After Arguments Parsed, Open [Optional] Files */
-  if (cnfg.convertFile == false)
-  {
-    cnfg.ofp = fopen(cnfg.outFname, "wb");
-  }
-  else
-  {
-    cnfg.ifp = fopen(cnfg.sampFname, "rb");
-    if (cnfg.ifp == NULL)
-    {
-      printf("No such file %s\n", cnfg.sampFname);
-      exit(1);
-    }
-    else
-    {
-      cnfg.ofp = fopen(cnfg.outFname, "wb");
-      if (cnfg.ofp == NULL)
-      {
-        printf("Can't open output file\n");
-        exit(1);
-      }
-      else
-      {
-        raw2bin(cnfg.ofp, cnfg.ifp, cnfg.FNHN);
-      }
-    }
-    fclose(cnfg.ifp);
-    fclose(cnfg.ofp);
-    exit(0);
-  }
 
-  targetBytes = 8184 * cnfg.sampMS;
-  sampleTime = (float)(targetBytes / 8184) / 1000;
+  targetBytes = BYTESPERMS * cnfg.sampMS;
+  sampleTime = (float)(targetBytes / BYTESPERMS) / MSPERSEC;
 
   fprintf(stderr, "Looking for %ld Bytes (N*8184) %6.3f sec\n",
           targetBytes, sampleTime);
-  ftS = FT_Open(0, &ftH);
+
+  // ftS = FT_Open(0, &ftH);
+  ftS = FT_OpenEx("USB<->GPS A", FT_OPEN_BY_DESCRIPTION, &cnfg.ftC.ftH);
   if (ftS != FT_OK)
   {
     fprintf(stderr, "open device status not ok %d\n", ftS);
@@ -501,11 +498,29 @@ int main(int argc, char *argv[])
     return 1;
   } */
 
-  readFTDIConfig(ftH);
-  ftS = FT_GetQueueStatus(ftH, &rx.CNT);
+  // readFTDIConfig(ftH);
+  readFTDIConfig(&cnfg.ftC);
+#ifdef DEBUG
+  fprintf(stdout, "ftDrvr:0x%x  ", cnfg.ftC.ftDriverVer);
+  fprintf(stderr, "FIFO:%s  ",
+          (cnfg.ftC.ftData.IFAIsFifo7 != 0) ? "Yes" : "No");
+  if (cnfg.ftC.lComPortNumber == -1)
+  {
+    fprintf(stderr, "No COM port assigned\n");
+  }
+  else
+  {
+    fprintf(stderr, "COM Port: %d ", cnfg.ftC.lComPortNumber);
+  }
+
+  fprintf(stderr, "%s %s SN:%s \n", cnfg.ftC.ftData.Description, cnfg.ftC.ftData.Manufacturer,
+          cnfg.ftC.ftData.SerialNumber);
+#endif
+
+  ftS = FT_GetQueueStatus(cnfg.ftC.ftH, &rx.CNT);
   fprintf(stderr, "Bytes In Queue: %d   ", rx.CNT);
 
-  ftS = FT_Purge(ftH, FT_PURGE_RX | FT_PURGE_TX); // Purge both Rx and Tx buffers
+  ftS = FT_Purge(cnfg.ftC.ftH, FT_PURGE_RX | FT_PURGE_TX); // Purge both Rx and Tx buffers
   if (ftS == FT_OK)
   {
     // FT_Purge OK
@@ -515,16 +530,16 @@ int main(int argc, char *argv[])
     // FT_Purge failed
   }
 
-  ftS = FT_GetQueueStatus(ftH, &rx.CNT);
+  ftS = FT_GetQueueStatus(cnfg.ftC.ftH, &rx.CNT);
   fprintf(stderr, "Bytes In Queue: %d\n", rx.CNT);
 
   while (totalBytes < targetBytes)
   {
-    ftS = FT_GetQueueStatus(ftH, &rx.CNT);
+    ftS = FT_GetQueueStatus(cnfg.ftC.ftH, &rx.CNT);
     printf("%s", blankLine);
     printf("bytes in RX queue %d ... ", rx.CNT);
     rx.SZE = rx.CNT; // tell it you want the whole buffer
-    ftS = FT_Read(ftH, rx.MSG, rx.SZE, &rx.CNT);
+    ftS = FT_Read(cnfg.ftC.ftH, rx.MSG, rx.SZE, &rx.CNT);
     if (ftS != FT_OK)
     {
       fprintf(stderr, "Status not OK %d\n", ftS);
@@ -553,9 +568,9 @@ int main(int argc, char *argv[])
     }                            // end Read was not an error
   }                              // end while loop
 
-  if (FT_W32_PurgeComm(ftH, PURGE_TXCLEAR | PURGE_RXCLEAR))
+  if (FT_W32_PurgeComm(cnfg.ftC.ftH, PURGE_TXCLEAR | PURGE_RXCLEAR))
     printf("\nPurging Buffers\n");
-  ftS = FT_Close(ftH);
+  ftS = FT_Close(cnfg.ftC.ftH);
   fclose(cnfg.ofp);
   //  WSACleanup();
   return 0;
