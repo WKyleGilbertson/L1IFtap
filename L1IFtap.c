@@ -2,13 +2,15 @@
 #define WIN32_LEAN_AND_MEAN
 #endif
 
-// #pragma comment(lib, "Ws2_32.lib")
 #pragma comment(lib, "lib/FTD2XX.lib")
+#ifdef WINUDP
+#pragma comment(lib, "Ws2_32.lib")
+#include <winsock2.h>
+#include <ws2tcpip.h>
+#endif
 #include "inc/ftd2xx.h"
 #include "inc/circular_buffer.h"
 #include "inc/version.h"
-// #include <winsock2.h>
-// #include <ws2tcpip.h>
 #include <stdlib.h>
 #include <stdint.h>
 #include <string.h>
@@ -24,7 +26,7 @@
 #define CBUFFSZ 32768
 #define BYTESPERMS 8184
 #define MSPERSEC 1000
-//#define DEBUG
+// #define DEBUG
 
 typedef struct
 {
@@ -187,7 +189,9 @@ void processArgs(int argc, char *argv[], CONFIG *cfg)
 #if !defined(_WIN32)
           getISO8601(cfg->baseFname); // getISO8601 for GCC platforms
 #endif
+#ifdef DEBUG
           printf("%s\n", cfg->baseFname);
+#endif
           break;
         case 'v':
           fprintf(stdout, "%s: GitCI:%s %s v%.1d.%.1d.%.1d",
@@ -396,24 +400,27 @@ void convertFile(CONFIG *cfg)
 
 int main(int argc, char *argv[])
 {
+#ifdef WINUDP
+  WSADATA wsaData;
+  int32_t iResult; // WSA
+#endif
   CONFIG cnfg;
   char ManufacturerBuf[32];
   char ManufacturerIdBuf[16];
   char DescriptionBuf[64];
   char SerialNumberBuf[16];
 
-  cnfg.ftC.ftData.Signature1     = 0x00000000;
-  cnfg.ftC.ftData.Signature2     = 0xffffffff;
-  cnfg.ftC.ftData.Version        = 0x00000003;        // 2232H extensions
-  cnfg.ftC.ftData.Manufacturer   = ManufacturerBuf;
+  cnfg.ftC.ftData.Signature1 = 0x00000000;
+  cnfg.ftC.ftData.Signature2 = 0xffffffff;
+  cnfg.ftC.ftData.Version = 0x00000003; // 2232H extensions
+  cnfg.ftC.ftData.Manufacturer = ManufacturerBuf;
   cnfg.ftC.ftData.ManufacturerId = ManufacturerIdBuf;
-  cnfg.ftC.ftData.Description    = DescriptionBuf;
-  cnfg.ftC.ftData.SerialNumber   = SerialNumberBuf;
+  cnfg.ftC.ftData.Description = DescriptionBuf;
+  cnfg.ftC.ftData.SerialNumber = SerialNumberBuf;
 
   PKT rx;
   FT_STATUS ftS;
-  //  WSADATA wsaData;
-  //  int iResult; // WSA
+
   float sampleTime = 0.0;
   unsigned long i = 0, totalBytes = 0, targetBytes = 0;
   unsigned char sampleValue;
@@ -479,8 +486,9 @@ int main(int argc, char *argv[])
   targetBytes = BYTESPERMS * cnfg.sampMS;
   sampleTime = (float)(targetBytes / BYTESPERMS) / MSPERSEC;
 
-  fprintf(stderr, "Looking for %ld Bytes (N*8184) %6.3f sec\n",
-          targetBytes, sampleTime);
+  fprintf(stdout, "%d ms requested.\n", cnfg.sampMS);
+  fprintf(stdout, "Collecting %10lu Bytes (Nms*8184) [%6.3f sec] in %s\n",
+          targetBytes, sampleTime, cnfg.outFname);
 
   // ftS = FT_Open(0, &ftH);
   ftS = FT_OpenEx("USB<->GPS A", FT_OPEN_BY_DESCRIPTION, &cnfg.ftC.ftH);
@@ -490,15 +498,15 @@ int main(int argc, char *argv[])
     exit(1);
   }
 
-  /* If using UDP, set it up
+#ifdef WINUDP
   iResult = WSAStartup(MAKEWORD(2, 2), &wsaData);
   if (iResult != 0)
   {
     fprintf(stderr, "WSAStartup failed: %d\n", iResult);
     return 1;
-  } */
+  }
+#endif
 
-  // readFTDIConfig(ftH);
   readFTDIConfig(&cnfg.ftC);
 #ifdef DEBUG
   fprintf(stdout, "ftDrvr:0x%x  ", cnfg.ftC.ftDriverVer);
@@ -518,26 +526,29 @@ int main(int argc, char *argv[])
 #endif
 
   ftS = FT_GetQueueStatus(cnfg.ftC.ftH, &rx.CNT);
+#ifdef DEBUG
   fprintf(stderr, "Bytes In Queue: %d   ", rx.CNT);
+#endif
 
   ftS = FT_Purge(cnfg.ftC.ftH, FT_PURGE_RX | FT_PURGE_TX); // Purge both Rx and Tx buffers
-  if (ftS == FT_OK)
+  if (ftS != FT_OK)
   {
-    // FT_Purge OK
-  }
-  else
-  {
-    // FT_Purge failed
+    fprintf(stderr, "Couldn't purge FTDI FIFO buffer! %d\n", ftS);
+    fclose(cnfg.ofp);
+    exit(1);
   }
 
   ftS = FT_GetQueueStatus(cnfg.ftC.ftH, &rx.CNT);
+#ifdef DEBUG
   fprintf(stderr, "Bytes In Queue: %d\n", rx.CNT);
+#endif
 
   while (totalBytes < targetBytes)
   {
     ftS = FT_GetQueueStatus(cnfg.ftC.ftH, &rx.CNT);
     printf("%s", blankLine);
-    printf("bytes in RX queue %d ... ", rx.CNT);
+    printf("Collected: %10lu Bytes [%10lu remaining with %5d in queue]",
+     totalBytes, targetBytes - totalBytes, rx.CNT);
     rx.SZE = rx.CNT; // tell it you want the whole buffer
     ftS = FT_Read(cnfg.ftC.ftH, rx.MSG, rx.SZE, &rx.CNT);
     if (ftS != FT_OK)
@@ -553,12 +564,11 @@ int main(int argc, char *argv[])
         {
           cbstatus = circular_buf_try_put(cb, rx.MSG[i]);
           totalBytes += 1;
-          if (totalBytes % 8184 == 0) // 8184 Bytes = 1 ms of data
+          if (totalBytes % BYTESPERMS == 0) // 8184 Bytes = 1 ms of data
           {
             // fprintf(stderr, "CB Size: %zu\n", circular_buf_size(cb));
             // Write to UDP stream or copy 1 ms of data, then put it to a file and
             purgeCBUFFtoFile(cnfg.ofp, cb, cnfg.logfile, cnfg.FNHN);
-            // purgeCBUFFtoFile(RAW, cb);
             if (totalBytes == targetBytes)
               break;
           }
@@ -572,6 +582,8 @@ int main(int argc, char *argv[])
     printf("\nPurging Buffers\n");
   ftS = FT_Close(cnfg.ftC.ftH);
   fclose(cnfg.ofp);
-  //  WSACleanup();
+#ifdef WINUDP
+  WSACleanup();
+#endif
   return 0;
 }
