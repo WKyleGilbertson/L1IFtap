@@ -562,7 +562,8 @@ int main(int argc, char *argv[])
       {
         for (i = 0; i < rx.CNT; i++)
         {
-          cbstatus = circular_buf_try_put(cb, rx.MSG[i]);
+          //cbstatus = circular_buf_try_put(cb, rx.MSG[i]);
+          circular_buf_put(cb, rx.MSG[i]);
           totalBytes += 1;
           if (totalBytes % BYTESPERMS == 0) // 8184 Bytes = 1 ms of data
           {
