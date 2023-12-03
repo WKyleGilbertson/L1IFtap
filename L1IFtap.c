@@ -374,6 +374,53 @@ void raw2bin(FILE *dst, FILE *src, bool FNHN)
   fclose(dst);
 }
 
+void writeToBinFile(CONFIG *cfg, PKT *p)
+{
+  int32_t idx = 0;
+  uint8_t byteData = 0, upperNibble, lowerNibble;
+  int8_t valueToWrite = 0;
+  //  printf("Convert file size: %d\n", fSize);
+
+  for (idx = 0; idx < p->CNT; idx++)
+  {
+    byteData = p->MSG[idx];
+    upperNibble = (byteData & 0x30) >> 4;
+    lowerNibble = (byteData & 0x03);
+    switch (cfg->FNHN == true ? upperNibble : lowerNibble)
+    {
+    case 0x00:
+      valueToWrite = 1;
+      break;
+    case 0x01:
+      valueToWrite = 3;
+      break;
+    case 0x02:
+      valueToWrite = -1;
+      break;
+    case 0x03:
+      valueToWrite = -3;
+      break;
+    }
+    fputc(valueToWrite, cfg->ofp);
+    switch (cfg->FNHN == true ? lowerNibble : upperNibble)
+    {
+    case 0x00:
+      valueToWrite = 1;
+      break;
+    case 0x01:
+      valueToWrite = 3;
+      break;
+    case 0x02:
+      valueToWrite = -1;
+      break;
+    case 0x03:
+      valueToWrite = -3;
+      break;
+    }
+    fputc(valueToWrite, cfg->ofp);
+  }
+}
+
 void convertFile(CONFIG *cfg)
 {
   cfg->ifp = fopen(cfg->sampFname, "rb");
@@ -425,7 +472,6 @@ int main(int argc, char *argv[])
 
   float sampleTime = 0.0;
   unsigned long i = 0, totalBytes = 0, targetBytes = 0;
-  unsigned long bytesToWrite = 0;
   unsigned char sampleValue;
   char valueToWrite;
 
@@ -563,18 +609,20 @@ int main(int argc, char *argv[])
     {
       if ((rx.CNT < 65536) && (rx.CNT > 0))
       {
+        if ((totalBytes + rx.CNT) > targetBytes)
+        {
+          rx.CNT = targetBytes - totalBytes;
+          // printf("\nrem:%d %d %d %d\n", totalBytes, targetBytes, rx.CNT, bytesToWrite);
+        }
         if (cnfg.logfile == true)
         {
-          bytesToWrite = rx.CNT;
-          if ((totalBytes + rx.CNT) > targetBytes)
-          {
-            bytesToWrite = targetBytes - totalBytes;
-            //printf("\nrem:%d %d %d %d\n", totalBytes, targetBytes, rx.CNT, bytesToWrite);
-          }
-          fwrite(rx.MSG, sizeof(uint8_t), bytesToWrite, cnfg.ofp);
-          totalBytes += bytesToWrite;
+          fwrite(rx.MSG, sizeof(uint8_t), rx.CNT, cnfg.ofp);
         }
-
+        else
+        {
+          writeToBinFile(&cnfg, &rx);
+        }
+        totalBytes += rx.CNT;
         /*        for (i = 0; i < rx.CNT; i++)
                 {
                   //cbstatus = circular_buf_try_put(cb, rx.MSG[i]);
@@ -596,7 +644,7 @@ int main(int argc, char *argv[])
   if (FT_W32_PurgeComm(cnfg.ftC.ftH, PURGE_TXCLEAR | PURGE_RXCLEAR))
   {
     fprintf(stdout, "\n\t   %10lu Bytes written to %s",
-            totalBytes, cnfg.outFname);
+            cnfg.logfile == true ? totalBytes : totalBytes * 2, cnfg.outFname);
   }
   ftS = FT_Close(cnfg.ftC.ftH);
   fclose(cnfg.ofp);
