@@ -258,8 +258,8 @@ void readFTDIConfig(FT_CFG *cfg)
   {
     fprintf(stderr, "FTDI Get Com Port Failed! %d\n", ftS);
   }
- ftS = FT_SetLatencyTimer(cfg->ftH, 2);
- ftS = FT_SetUSBParameters(cfg->ftH, 0x10000, 0x10000);
+  ftS = FT_SetLatencyTimer(cfg->ftH, 2);
+  ftS = FT_SetUSBParameters(cfg->ftH, 0x10000, 0x10000);
 }
 
 void purgeCBUFFtoFile(FILE *fp, cbuf_handle_t cbH, bool raw, bool FNHN)
@@ -425,6 +425,7 @@ int main(int argc, char *argv[])
 
   float sampleTime = 0.0;
   unsigned long i = 0, totalBytes = 0, targetBytes = 0;
+  unsigned long bytesToWrite = 0;
   unsigned char sampleValue;
   char valueToWrite;
 
@@ -562,25 +563,31 @@ int main(int argc, char *argv[])
     {
       if ((rx.CNT < 65536) && (rx.CNT > 0))
       {
-        if (cnfg.logfile == true) 
+        if (cnfg.logfile == true)
         {
-        fwrite(rx.MSG, sizeof(uint8_t), rx.CNT, cnfg.ofp);
-        totalBytes += rx.CNT;
+          bytesToWrite = rx.CNT;
+          if ((totalBytes + rx.CNT) > targetBytes)
+          {
+            bytesToWrite = targetBytes - totalBytes;
+            //printf("\nrem:%d %d %d %d\n", totalBytes, targetBytes, rx.CNT, bytesToWrite);
+          }
+          fwrite(rx.MSG, sizeof(uint8_t), bytesToWrite, cnfg.ofp);
+          totalBytes += bytesToWrite;
         }
 
-/*        for (i = 0; i < rx.CNT; i++)
-        {
-          //cbstatus = circular_buf_try_put(cb, rx.MSG[i]);
-          totalBytes += 1;
-          if (totalBytes % BYTESPERMS == 0) // 8184 Bytes = 1 ms of data
-          {
-            // fprintf(stderr, "CB Size: %zu\n", circular_buf_size(cb));
-            // Write to UDP stream or copy 1 ms of data, then put it to a file and
-            purgeCBUFFtoFile(cnfg.ofp, cb, cnfg.logfile, cnfg.FNHN);
-            if (totalBytes == targetBytes)
-              break;
-          }
-        } */
+        /*        for (i = 0; i < rx.CNT; i++)
+                {
+                  //cbstatus = circular_buf_try_put(cb, rx.MSG[i]);
+                  totalBytes += 1;
+                  if (totalBytes % BYTESPERMS == 0) // 8184 Bytes = 1 ms of data
+                  {
+                    // fprintf(stderr, "CB Size: %zu\n", circular_buf_size(cb));
+                    // Write to UDP stream or copy 1 ms of data, then put it to a file and
+                    purgeCBUFFtoFile(cnfg.ofp, cb, cnfg.logfile, cnfg.FNHN);
+                    if (totalBytes == targetBytes)
+                      break;
+                  }
+                } */
       }                          // end buffer read not too big
       memset(rx.MSG, 0, rx.CNT); // May not be necessary
     }                            // end Read was not an error
