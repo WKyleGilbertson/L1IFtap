@@ -562,10 +562,15 @@ int main(int argc, char *argv[])
     {
       if ((rx.CNT < 65536) && (rx.CNT > 0))
       {
-        for (i = 0; i < rx.CNT; i++)
+        if (cnfg.logfile == true) 
+        {
+        fwrite(rx.MSG, sizeof(uint8_t), rx.CNT, cnfg.ofp);
+        totalBytes += rx.CNT;
+        }
+
+/*        for (i = 0; i < rx.CNT; i++)
         {
           //cbstatus = circular_buf_try_put(cb, rx.MSG[i]);
-          circular_buf_put(cb, rx.MSG[i]);
           totalBytes += 1;
           if (totalBytes % BYTESPERMS == 0) // 8184 Bytes = 1 ms of data
           {
@@ -575,7 +580,7 @@ int main(int argc, char *argv[])
             if (totalBytes == targetBytes)
               break;
           }
-        }
+        } */
       }                          // end buffer read not too big
       memset(rx.MSG, 0, rx.CNT); // May not be necessary
     }                            // end Read was not an error
