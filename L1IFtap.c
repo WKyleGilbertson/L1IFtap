@@ -593,7 +593,7 @@ int main(int argc, char *argv[])
 
   if (FT_W32_PurgeComm(cnfg.ftC.ftH, PURGE_TXCLEAR | PURGE_RXCLEAR))
   {
-    fprintf(stdout, "\n\t   %10lu Bytes written to %s",
+    fprintf(stdout, "\n\t   %10lu Bytes written to %s\n",
             cnfg.logfile == true ? totalBytes : totalBytes * 2, cnfg.outFname);
   }
   ftS = FT_Close(cnfg.ftC.ftH);
