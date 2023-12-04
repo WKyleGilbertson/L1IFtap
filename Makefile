@@ -5,8 +5,8 @@ CURRENT_HASH := '"$(shell git rev-parse HEAD)"'
 CURRENT_DATE := '"$(shell date /t)"'
 CURRENT_NAME := '"L1IFtap"'
 
-L1IFtap: L1IFtap.c inc/circular_buffer.c
-	$(CC) L1IFtap.c inc/circular_buffer.c /EHsc /DCURRENT_HASH=$(CURRENT_HASH) \
+L1IFtap: L1IFtap.c
+	$(CC) L1IFtap.c /EHsc /DCURRENT_HASH=$(CURRENT_HASH) \
 	/DCURRENT_DATE=$(CURRENT_DATE) /DCURRENT_NAME=$(CURRENT_NAME) 
 	del *.obj
 

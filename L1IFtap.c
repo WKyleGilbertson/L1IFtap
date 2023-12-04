@@ -9,7 +9,6 @@
 #include <ws2tcpip.h>
 #endif
 #include "inc/ftd2xx.h"
-#include "inc/circular_buffer.h"
 #include "inc/version.h"
 #include <stdlib.h>
 #include <stdint.h>
@@ -23,7 +22,6 @@
 #endif
 
 #define MLEN 65536
-#define CBUFFSZ 32768
 #define BYTESPERMS 8184
 #define MSPERSEC 1000
 // #define DEBUG
@@ -262,68 +260,6 @@ void readFTDIConfig(FT_CFG *cfg)
   ftS = FT_SetUSBParameters(cfg->ftH, 0x10000, 0x10000);
 }
 
-void purgeCBUFFtoFile(FILE *fp, cbuf_handle_t cbH, bool raw, bool FNHN)
-{
-  uint8_t ch;
-  uint8_t upperNibble;
-  uint8_t lowerNibble;
-  int8_t valueToWrite;
-  uint32_t sze = circular_buf_size(cbH);
-  uint32_t idx;
-
-  for (idx = 0; idx < sze; idx++)
-  {
-    circular_buf_get(cbH, &ch);
-    if (raw == true)
-    {
-      fputc(ch, fp);
-    }
-    else
-    {
-      upperNibble = (ch & 0x30) >> 4;
-      lowerNibble = (ch & 0x03);
-      switch (FNHN == true ? upperNibble : lowerNibble)
-      {
-      case 0x00:
-        valueToWrite = 1;
-        break;
-      case 0x01:
-        valueToWrite = 3;
-        break;
-      case 0x02:
-        valueToWrite = -1;
-        break;
-      case 0x03:
-        valueToWrite = -3;
-        break;
-      }
-      fputc(valueToWrite, fp);
-      switch (FNHN == true ? lowerNibble : upperNibble)
-      {
-      case 0x00:
-        valueToWrite = 1;
-        break;
-      case 0x01:
-        valueToWrite = 3;
-        break;
-      case 0x02:
-        valueToWrite = -1;
-        break;
-      case 0x03:
-        valueToWrite = -3;
-        break;
-      }
-      fputc(valueToWrite, fp);
-    }
-  }
-
-  if (circular_buf_size(cbH) != 0)
-  {
-    fprintf(stderr, "Error, Circ Buf Not Empty\n");
-    exit(1);
-  }
-}
-
 void raw2bin(FILE *dst, FILE *src, bool FNHN)
 {
   int32_t fSize = 0, idx = 0;
@@ -480,12 +416,6 @@ int main(int argc, char *argv[])
   uint8_t blankLine[120];
   uint8_t ch;
 
-  int16_t cbstatus;
-  uint8_t CBuff[CBUFFSZ];
-  cbuf_handle_t cb = circular_buf_init(CBuff, CBUFFSZ);
-  bool full = circular_buf_full(cb);
-  bool empty = circular_buf_empty(cb);
-
   cnfg.V.Major = MAJOR_VERSION;
   cnfg.V.Minor = MINOR_VERSION;
   cnfg.V.Patch = PATCH_VERSION;
@@ -623,19 +553,6 @@ int main(int argc, char *argv[])
           writeToBinFile(&cnfg, &rx);
         }
         totalBytes += rx.CNT;
-        /*        for (i = 0; i < rx.CNT; i++)
-                {
-                  //cbstatus = circular_buf_try_put(cb, rx.MSG[i]);
-                  totalBytes += 1;
-                  if (totalBytes % BYTESPERMS == 0) // 8184 Bytes = 1 ms of data
-                  {
-                    // fprintf(stderr, "CB Size: %zu\n", circular_buf_size(cb));
-                    // Write to UDP stream or copy 1 ms of data, then put it to a file and
-                    purgeCBUFFtoFile(cnfg.ofp, cb, cnfg.logfile, cnfg.FNHN);
-                    if (totalBytes == targetBytes)
-                      break;
-                  }
-                } */
       }                          // end buffer read not too big
       memset(rx.MSG, 0, rx.CNT); // May not be necessary
     }                            // end Read was not an error
