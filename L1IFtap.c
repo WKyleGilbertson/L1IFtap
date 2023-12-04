@@ -344,9 +344,9 @@ void writeToBinFile(CONFIG *cfg, PKT *p)
 {
   int32_t idx = 0;
   uint8_t byteData = 0, upperNibble, lowerNibble;
-  int8_t valueToWrite = 0;
-  //  printf("Convert file size: %d\n", fSize);
+  int8_t valueToWrite = 0, buff[131072];
 
+  memset(buff, 0, 131072);
   for (idx = 0; idx < p->CNT; idx++)
   {
     byteData = p->MSG[idx];
@@ -367,7 +367,8 @@ void writeToBinFile(CONFIG *cfg, PKT *p)
       valueToWrite = -3;
       break;
     }
-    fputc(valueToWrite, cfg->ofp);
+    buff[2*idx] = valueToWrite;
+//    fputc(valueToWrite, cfg->ofp);
     switch (cfg->FNHN == true ? lowerNibble : upperNibble)
     {
     case 0x00:
@@ -383,8 +384,10 @@ void writeToBinFile(CONFIG *cfg, PKT *p)
       valueToWrite = -3;
       break;
     }
-    fputc(valueToWrite, cfg->ofp);
+    buff[2*idx+1] = valueToWrite;
+//    fputc(valueToWrite, cfg->ofp);
   }
+  fwrite(buff, sizeof(int8_t), p->CNT * 2, cfg->ofp);
 }
 
 void convertFile(CONFIG *cfg)
