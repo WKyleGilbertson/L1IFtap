@@ -63,6 +63,23 @@ void fileSize(FILE *fp, int32_t *fs)
   *fs = ftell(fp);
   rewind(fp);
 }
+void printFTDIdevInfo(FT_CFG *ftC)
+{
+  fprintf(stdout, "ftDrvr:0x%x  ", ftC->ftDriverVer);
+  fprintf(stderr, "FIFO:%s  ",
+          (ftC->ftData.IFAIsFifo7 != 0) ? "Yes" : "No");
+  if (ftC->lComPortNumber == -1)
+  {
+    fprintf(stderr, "No COM port assigned\n");
+  }
+  else
+  {
+    fprintf(stderr, "COM Port: %d ", ftC->lComPortNumber);
+  }
+
+  fprintf(stderr, "%s %s SN:%s \n", ftC->ftData.Description, ftC->ftData.Manufacturer,
+          ftC->ftData.SerialNumber);
+}
 
 #if !defined(_WIN32)
 void getISO8601(char datetime[17])
@@ -192,9 +209,11 @@ void processArgs(int argc, char *argv[], CONFIG *cfg)
 #endif
           break;
         case 'v':
-          fprintf(stdout, "%s: GitCI:%s %s v%.1d.%.1d.%.1d",
+          fprintf(stdout, "%s: GitCI:%s %s v%.1d.%.1d.%.1d\n",
                   cfg->V.Name, cfg->V.GitCI, cfg->V.BuildDate,
                   cfg->V.Major, cfg->V.Minor, cfg->V.Patch);
+          if (cfg->ftC.ftH != 0)
+            printFTDIdevInfo(&cfg->ftC);
           exit(0);
           break;
         default:
@@ -232,32 +251,35 @@ void processArgs(int argc, char *argv[], CONFIG *cfg)
 void readFTDIConfig(FT_CFG *cfg)
 {
   FT_STATUS ftS;
-  ftS = FT_GetDriverVersion(cfg->ftH, &cfg->ftDriverVer);
-  if (ftS != FT_OK)
+  if (cfg->ftH != 0)
   {
-    fprintf(stderr, "Couldn't read FTDI driver version.\n");
-  }
+    ftS = FT_GetDriverVersion(cfg->ftH, &cfg->ftDriverVer);
+    if (ftS != FT_OK)
+    {
+      fprintf(stderr, "Couldn't read FTDI driver version.\n");
+    }
 
-  ftS = FT_SetTimeouts(cfg->ftH, 500, 500);
-  if (ftS != FT_OK)
-  {
-    fprintf(stderr, "timeout A status not ok %d\n", ftS);
-    exit(1);
-  }
+    ftS = FT_SetTimeouts(cfg->ftH, 500, 500);
+    if (ftS != FT_OK)
+    {
+      fprintf(stderr, "timeout A status not ok %d\n", ftS);
+      // exit(1);
+    }
 
-  ftS = FT_EE_Read(cfg->ftH, &cfg->ftData);
-  if (ftS != FT_OK)
-  {
-    fprintf(stderr, "FTDI EE Read did not succeed! %d\n", ftS);
-  }
+    ftS = FT_EE_Read(cfg->ftH, &cfg->ftData);
+    if (ftS != FT_OK)
+    {
+      fprintf(stderr, "FTDI EE Read did not succeed! %d\n", ftS);
+    }
 
-  ftS = FT_GetComPortNumber(cfg->ftH, &cfg->lComPortNumber);
-  if (ftS != FT_OK)
-  {
-    fprintf(stderr, "FTDI Get Com Port Failed! %d\n", ftS);
+    ftS = FT_GetComPortNumber(cfg->ftH, &cfg->lComPortNumber);
+    if (ftS != FT_OK)
+    {
+      fprintf(stderr, "FTDI Get Com Port Failed! %d\n", ftS);
+    }
+    ftS = FT_SetLatencyTimer(cfg->ftH, 2);
+    ftS = FT_SetUSBParameters(cfg->ftH, 0x10000, 0x10000);
   }
-  ftS = FT_SetLatencyTimer(cfg->ftH, 2);
-  ftS = FT_SetUSBParameters(cfg->ftH, 0x10000, 0x10000);
 }
 
 void raw2bin(FILE *dst, FILE *src, bool FNHN)
@@ -438,7 +460,18 @@ int main(int argc, char *argv[])
   memset(rx.MSG, 0, 65536);
 
   initconfig(&cnfg);
+
+  // ftS = FT_Open(0, &ftH);
+  ftS = FT_OpenEx("USB<->GPS A", FT_OPEN_BY_DESCRIPTION, &cnfg.ftC.ftH);
+  if (ftS != FT_OK)
+  {
+    fprintf(stderr, "Device not present. Perhaps just not plugged in?\n");
+    // fprintf(stderr, "open device status not ok %d\n", ftS);
+  }
+  readFTDIConfig(&cnfg.ftC);
   processArgs(argc, argv, &cnfg);
+  if (cnfg.ftC.ftH == 0)
+    exit(0);
 
   if (cnfg.convertFile == true)
   {
@@ -449,6 +482,7 @@ int main(int argc, char *argv[])
   {
     cnfg.ofp = fopen(cnfg.outFname, "wb");
   }
+
 #ifdef DEBUG
   fprintf(stdout, "base:%s out:%s samp:%s ",
           cnfg.baseFname, cnfg.outFname, cnfg.sampFname);
@@ -469,13 +503,13 @@ int main(int argc, char *argv[])
   fprintf(stdout, "Collecting %10lu Bytes (Nms*8184) [%6.3f sec] in %s\n",
           targetBytes, sampleTime, cnfg.outFname);
 
-  // ftS = FT_Open(0, &ftH);
-  ftS = FT_OpenEx("USB<->GPS A", FT_OPEN_BY_DESCRIPTION, &cnfg.ftC.ftH);
-  if (ftS != FT_OK)
-  {
-    fprintf(stderr, "open device status not ok %d\n", ftS);
-    exit(1);
-  }
+  /*  // ftS = FT_Open(0, &ftH);
+    ftS = FT_OpenEx("USB<->GPS A", FT_OPEN_BY_DESCRIPTION, &cnfg.ftC.ftH);
+    if (ftS != FT_OK)
+    {
+      fprintf(stderr, "open device status not ok %d\n", ftS);
+      exit(1);
+    } */
 
 #ifdef WINUDP
   iResult = WSAStartup(MAKEWORD(2, 2), &wsaData);
@@ -486,7 +520,7 @@ int main(int argc, char *argv[])
   }
 #endif
 
-  readFTDIConfig(&cnfg.ftC);
+//  readFTDIConfig(&cnfg.ftC);
 #ifdef DEBUG
   fprintf(stdout, "ftDrvr:0x%x  ", cnfg.ftC.ftDriverVer);
   fprintf(stderr, "FIFO:%s  ",
