@@ -368,7 +368,6 @@ void writeToBinFile(CONFIG *cfg, PKT *p)
       break;
     }
     buff[2*idx] = valueToWrite;
-//    fputc(valueToWrite, cfg->ofp);
     switch (cfg->FNHN == true ? lowerNibble : upperNibble)
     {
     case 0x00:
@@ -385,7 +384,6 @@ void writeToBinFile(CONFIG *cfg, PKT *p)
       break;
     }
     buff[2*idx+1] = valueToWrite;
-//    fputc(valueToWrite, cfg->ofp);
   }
   fwrite(buff, sizeof(int8_t), p->CNT * 2, cfg->ofp);
 }
