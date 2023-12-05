@@ -286,7 +286,8 @@ void readFTDIConfig(FT_CFG *cfg)
     }
     #endif
     ftS = FT_SetLatencyTimer(cfg->ftH, 2);
-    ftS = FT_SetUSBParameters(cfg->ftH, 0x10000, 0x10000);
+    //ftS = FT_SetUSBParameters(cfg->ftH, 0x10000, 0x10000);
+    ftS = FT_SetUSBParameters(cfg->ftH, 0x02000, 0x02000); // 8192
   }
 }
 
@@ -434,7 +435,7 @@ int main(int argc, char *argv[])
   cnfg.ftC.ftData.Description = DescriptionBuf;
   cnfg.ftC.ftData.SerialNumber = SerialNumberBuf;
 
-  PKT rx;
+  PKT rx, msa, msb;
   FT_STATUS ftS;
 
   float sampleTime = 0.0;
@@ -442,7 +443,7 @@ int main(int argc, char *argv[])
   unsigned char sampleValue;
   char valueToWrite;
 
-  uint32_t idx = 0;
+  uint32_t idx = 0, idx2 = 0, idx3 = 0;
   int32_t len = 0;
   uint8_t blankLine[120];
   uint8_t ch;
@@ -521,23 +522,6 @@ int main(int argc, char *argv[])
   }
 #endif
 
-#ifdef DEBUG
-  fprintf(stdout, "ftDrvr:0x%x  ", cnfg.ftC.ftDriverVer);
-  fprintf(stderr, "FIFO:%s  ",
-          (cnfg.ftC.ftData.IFAIsFifo7 != 0) ? "Yes" : "No");
-  if (cnfg.ftC.lComPortNumber == -1)
-  {
-    fprintf(stderr, "No COM port assigned\n");
-  }
-  else
-  {
-    fprintf(stderr, "COM Port: %d ", cnfg.ftC.lComPortNumber);
-  }
-
-  fprintf(stderr, "%s %s SN:%s \n", cnfg.ftC.ftData.Description, cnfg.ftC.ftData.Manufacturer,
-          cnfg.ftC.ftData.SerialNumber);
-#endif
-
   ftS = FT_GetQueueStatus(cnfg.ftC.ftH, &rx.CNT);
 #ifdef DEBUG
   fprintf(stderr, "Bytes In Queue: %d   ", rx.CNT);
@@ -573,6 +557,12 @@ int main(int argc, char *argv[])
     {
       if ((rx.CNT < 65536) && (rx.CNT > 0))
       {
+        /*
+        for (idx2 = 0; idx2 < 8184; idx2++) {
+        msa.MSG[idx2] = rx.MSG[idx2];
+        memcpy(msa.MSG, rx.MSG, rx.CNT);
+        } */
+
         if ((totalBytes + rx.CNT) > targetBytes)
         {
           rx.CNT = targetBytes - totalBytes;
