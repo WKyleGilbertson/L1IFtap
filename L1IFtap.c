@@ -639,15 +639,20 @@ int main(int argc, char *argv[])
         enQueue(&rx, &bfr, rx.CNT);
         while (bfr.SZE > BYTESPERMS)
         {
-//          fprintf(stderr, "ms# %8u", ++mscount);
+          //          fprintf(stderr, "ms# %8u", ++mscount);
           deQueue(&bfr, &ms, BYTESPERMS);
-          mscount++;
-        if (cnfg.logfile == true) {
-          fwrite(ms.MSG, sizeof(uint8_t), BYTESPERMS, cnfg.ofp);
-        }
-        else {
-          writeToBinFile(&cnfg, &ms);
-        }
+          if (mscount++ < cnfg.sampMS)
+          {
+            if (cnfg.logfile == true)
+            {
+              fwrite(ms.MSG, sizeof(uint8_t), BYTESPERMS, cnfg.ofp);
+            }
+            else
+            {
+              writeToBinFile(&cnfg, &ms);
+            }
+          }
+          else{break;}
         }
 
         if ((totalBytes + rx.CNT) > targetBytes)
