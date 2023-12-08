@@ -27,7 +27,8 @@
 #include "inc/WinTypes.h"
 #endif
 
-#define MLEN 65536
+//#define MLEN 65536
+#define MLEN 131072
 #define BYTESPERMS 8184
 #define MSPERSEC 1000
 // #define DEBUG
@@ -416,6 +417,7 @@ void convertFile(CONFIG *cfg)
   exit(0);
 }
 
+/*
 fillMSFrame(PKT *src, PKT *dst, PKT *ext)
 {
   uint16_t rem = 0;
@@ -469,6 +471,7 @@ fillMSFrame(PKT *src, PKT *dst, PKT *ext)
   {
   }
 }
+*/
 
 int32_t enQueue(PKT *src, PKT *dst, uint32_t cnt)
 {
@@ -538,12 +541,15 @@ int main(int argc, char *argv[])
   cnfg.V.Patch = PATCH_VERSION;
 #ifdef CURRENT_HASH
   strncpy(cnfg.V.GitCI, CURRENT_HASH, 40);
+  cnfg.V.GitCI[40] = '\0';
 #endif
 #ifdef CURRENT_DATE
   strncpy(cnfg.V.BuildDate, CURRENT_DATE, 16);
+  cnfg.V.BuildDate[16] = '\0';
 #endif
 #ifdef CURRENT_NAME
   strncpy(cnfg.V.Name, CURRENT_NAME, 10);
+  cnfg.V.Name[10] = '\0';
 #endif
 
   for (idx = 0; idx < 120; idx++)
