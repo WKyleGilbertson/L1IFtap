@@ -417,62 +417,6 @@ void convertFile(CONFIG *cfg)
   exit(0);
 }
 
-/*
-fillMSFrame(PKT *src, PKT *dst, PKT *ext)
-{
-  uint16_t rem = 0;
-  uint16_t rem2 = 0;
-  uint16_t cpsze = 0;
-
-  fprintf(stdout, "SRC.sze: %d DST.sze: %d EXT.sze:%d \n",
-          src->SZE, dst->SZE, ext->SZE);
-
-  if ((ext->SZE == 0) && (dst->SZE == 0) && (src->SZE > 0))
-  {
-    if (src->SZE >= 8184)
-    {
-      cpsze = 8184;
-      rem = src->SZE - 8184;
-      memcpy(dst->MSG, src->MSG, cpsze);
-      memcpy(ext->MSG, &src->MSG[8184], rem);
-      dst->SZE = 8184;
-      dst->CNT = 8184;
-      ext->SZE = rem;
-    }
-    else
-    {
-      memcpy(dst->MSG, src->MSG, src->SZE);
-      dst->SZE = src->SZE;
-      dst->CNT = 0;
-    }
-  }
-  else if ((ext->SZE == 0) && (dst->SZE > 0) && (src->SZE > 0))
-  {
-    cpsze = 8184 - dst->SZE;
-    memcpy(&dst->MSG[dst->SZE], src->MSG, cpsze);
-    if ((src->SZE + cpsze) >= 8184)
-    {
-      dst->SZE = 8184;
-      dst->CNT = 8184;
-      rem = (src->SZE + cpsze) - 8184;
-      memcpy(ext->MSG, &src->MSG[cpsze], rem);
-      ext->SZE = rem;
-    }
-    else if ((src->SZE + cpsze) <= 8184)
-    {
-      dst->SZE = src->SZE + cpsze;
-      dst->CNT = 0;
-    }
-  }
-  else if ((ext->SZE > 0) && (dst->SZE > 0) && (src->SZE > 0))
-  {
-  }
-  else if ((ext->SZE > 0) && (dst->SZE > 0) && (src->SZE = 0))
-  {
-  }
-}
-*/
-
 int32_t enQueue(PKT *src, PKT *dst, uint32_t cnt)
 {
   uint32_t ext = cnt + dst->SZE;
