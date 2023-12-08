@@ -9,7 +9,6 @@
         "/Zi",
         "/EHsc",
         "/nologo",
-        "inc/circular_buffer.c",
         "/Fe${fileDirname}\\${fileBasenameNoExtension}.exe",
         "${file}"
       ],

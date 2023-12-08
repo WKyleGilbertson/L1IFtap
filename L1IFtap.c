@@ -278,16 +278,17 @@ void readFTDIConfig(FT_CFG *cfg)
       fprintf(stderr, "FTDI EE Read did not succeed! %d\n", ftS);
     }
 
-    #if defined (_WIN32)
+#if defined(_WIN32)
     ftS = FT_GetComPortNumber(cfg->ftH, &cfg->lComPortNumber);
     if (ftS != FT_OK)
     {
       fprintf(stderr, "FTDI Get Com Port Failed! %d\n", ftS);
     }
-    #endif
+#endif
     ftS = FT_SetLatencyTimer(cfg->ftH, 2);
-    //ftS = FT_SetUSBParameters(cfg->ftH, 0x10000, 0x10000);
-    ftS = FT_SetUSBParameters(cfg->ftH, 0x02000, 0x02000); // 8192
+    // ftS = FT_SetUSBParameters(cfg->ftH, 0x10000, 0x10000);
+    // ftS = FT_SetUSBParameters(cfg->ftH, 0x02000, 0x02000); // 8192
+    ftS = FT_SetUSBParameters(cfg->ftH, 0x03000, 0x03000); // 16384
   }
 }
 
@@ -368,7 +369,7 @@ void writeToBinFile(CONFIG *cfg, PKT *p)
       valueToWrite = -3;
       break;
     }
-    buff[2*idx] = valueToWrite;
+    buff[2 * idx] = valueToWrite;
     switch (cfg->FNHN == true ? lowerNibble : upperNibble)
     {
     case 0x00:
@@ -384,7 +385,7 @@ void writeToBinFile(CONFIG *cfg, PKT *p)
       valueToWrite = -3;
       break;
     }
-    buff[2*idx+1] = valueToWrite;
+    buff[2 * idx + 1] = valueToWrite;
   }
   fwrite(buff, sizeof(int8_t), p->CNT * 2, cfg->ofp);
 }
@@ -415,6 +416,90 @@ void convertFile(CONFIG *cfg)
   exit(0);
 }
 
+fillMSFrame(PKT *src, PKT *dst, PKT *ext)
+{
+  uint16_t rem = 0;
+  uint16_t rem2 = 0;
+  uint16_t cpsze = 0;
+
+  fprintf(stdout, "SRC.sze: %d DST.sze: %d EXT.sze:%d \n",
+          src->SZE, dst->SZE, ext->SZE);
+
+  if ((ext->SZE == 0) && (dst->SZE == 0) && (src->SZE > 0))
+  {
+    if (src->SZE >= 8184)
+    {
+      cpsze = 8184;
+      rem = src->SZE - 8184;
+      memcpy(dst->MSG, src->MSG, cpsze);
+      memcpy(ext->MSG, &src->MSG[8184], rem);
+      dst->SZE = 8184;
+      dst->CNT = 8184;
+      ext->SZE = rem;
+    }
+    else
+    {
+      memcpy(dst->MSG, src->MSG, src->SZE);
+      dst->SZE = src->SZE;
+      dst->CNT = 0;
+    }
+  }
+  else if ((ext->SZE == 0) && (dst->SZE > 0) && (src->SZE > 0))
+  {
+    cpsze = 8184 - dst->SZE;
+    memcpy(&dst->MSG[dst->SZE], src->MSG, cpsze);
+    if ((src->SZE + cpsze) >= 8184)
+    {
+      dst->SZE = 8184;
+      dst->CNT = 8184;
+      rem = (src->SZE + cpsze) - 8184;
+      memcpy(ext->MSG, &src->MSG[cpsze], rem);
+      ext->SZE = rem;
+    }
+    else if ((src->SZE + cpsze) <= 8184)
+    {
+      dst->SZE = src->SZE + cpsze;
+      dst->CNT = 0;
+    }
+  }
+  else if ((ext->SZE > 0) && (dst->SZE > 0) && (src->SZE > 0))
+  {
+  }
+  else if ((ext->SZE > 0) && (dst->SZE > 0) && (src->SZE = 0))
+  {
+  }
+}
+
+int32_t enQueue(PKT *src, PKT *dst, uint32_t cnt)
+{
+  uint32_t ext = cnt + dst->SZE;
+
+  if (ext > MLEN)
+  {
+    fprintf(stderr, "OUT OF SPACE!\n");
+    return -1;
+  }
+  memcpy(&dst->MSG[dst->SZE], src->MSG, cnt);
+  dst->SZE += cnt;
+  return dst->SZE;
+}
+
+int32_t deQueue(PKT *src, PKT *dst, uint32_t cnt)
+{
+  uint32_t ext = src->SZE - cnt;
+
+  if (ext < 0)
+  {
+    fprintf(stderr, "REQUEST TOO LARGE!\n");
+    return -1;
+  }
+  memcpy(dst->MSG, src->MSG, cnt);
+  dst->SZE = dst->CNT = cnt;
+  memmove(src->MSG, &src->MSG[cnt], ext);
+  src->SZE = ext;
+  return src->SZE;
+}
+
 int main(int argc, char *argv[])
 {
 #ifdef WINUDP
@@ -435,7 +520,7 @@ int main(int argc, char *argv[])
   cnfg.ftC.ftData.Description = DescriptionBuf;
   cnfg.ftC.ftData.SerialNumber = SerialNumberBuf;
 
-  PKT rx, msa, msb;
+  PKT rx, bfr, ms;
   FT_STATUS ftS;
 
   float sampleTime = 0.0;
@@ -443,7 +528,7 @@ int main(int argc, char *argv[])
   unsigned char sampleValue;
   char valueToWrite;
 
-  uint32_t idx = 0, idx2 = 0, idx3 = 0;
+  uint32_t idx = 0, mscount = 0;
   int32_t len = 0;
   uint8_t blankLine[120];
   uint8_t ch;
@@ -468,6 +553,10 @@ int main(int argc, char *argv[])
   blankLine[119] = '\0';
 
   memset(rx.MSG, 0, 65536);
+  memset(bfr.MSG, 0, 65536);
+  memset(ms.MSG, 0, 65536);
+  bfr.CNT = bfr.SZE = 0;
+  ms.CNT = ms.SZE = 0;
 
   initconfig(&cnfg);
 
@@ -522,11 +611,6 @@ int main(int argc, char *argv[])
   }
 #endif
 
-  ftS = FT_GetQueueStatus(cnfg.ftC.ftH, &rx.CNT);
-#ifdef DEBUG
-  fprintf(stderr, "Bytes In Queue: %d   ", rx.CNT);
-#endif
-
   ftS = FT_Purge(cnfg.ftC.ftH, FT_PURGE_RX | FT_PURGE_TX); // Purge both Rx and Tx buffers
   if (ftS != FT_OK)
   {
@@ -535,16 +619,11 @@ int main(int argc, char *argv[])
     exit(1);
   }
 
-  ftS = FT_GetQueueStatus(cnfg.ftC.ftH, &rx.CNT);
-#ifdef DEBUG
-  fprintf(stderr, "Bytes In Queue: %d\n", rx.CNT);
-#endif
-
   while (totalBytes < targetBytes)
   {
     ftS = FT_GetQueueStatus(cnfg.ftC.ftH, &rx.CNT);
     fprintf(stdout, "%s", blankLine);
-    fprintf(stdout, "Collected: %10lu Bytes [%10lu bytes to go with %5d in queue]",
+    fprintf(stdout, "Collected: %10lu Bytes [%10lu left with %5d in queue] ",
             totalBytes, targetBytes - totalBytes, rx.CNT);
     rx.SZE = rx.CNT; // tell it you want the whole buffer
     ftS = FT_Read(cnfg.ftC.ftH, rx.MSG, rx.SZE, &rx.CNT);
@@ -557,26 +636,26 @@ int main(int argc, char *argv[])
     {
       if ((rx.CNT < 65536) && (rx.CNT > 0))
       {
-        /*
-        for (idx2 = 0; idx2 < 8184; idx2++) {
-        msa.MSG[idx2] = rx.MSG[idx2];
-        memcpy(msa.MSG, rx.MSG, rx.CNT);
-        } */
+        enQueue(&rx, &bfr, rx.CNT);
+        while (bfr.SZE > BYTESPERMS)
+        {
+//          fprintf(stderr, "ms# %8u", ++mscount);
+          deQueue(&bfr, &ms, BYTESPERMS);
+          mscount++;
+        if (cnfg.logfile == true) {
+          fwrite(ms.MSG, sizeof(uint8_t), BYTESPERMS, cnfg.ofp);
+        }
+        else {
+          writeToBinFile(&cnfg, &ms);
+        }
+        }
 
         if ((totalBytes + rx.CNT) > targetBytes)
         {
           rx.CNT = targetBytes - totalBytes;
-          // printf("\nrem:%d %d %d %d\n", totalBytes, targetBytes, rx.CNT, bytesToWrite);
-        }
-        if (cnfg.logfile == true)
-        {
-          fwrite(rx.MSG, sizeof(uint8_t), rx.CNT, cnfg.ofp);
-        }
-        else
-        {
-          writeToBinFile(&cnfg, &rx);
         }
         totalBytes += rx.CNT;
+        fprintf(stdout, "ms# %8u", mscount);
       }                          // end buffer read not too big
       memset(rx.MSG, 0, rx.CNT); // May not be necessary
     }                            // end Read was not an error
