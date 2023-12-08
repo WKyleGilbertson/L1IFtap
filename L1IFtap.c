@@ -287,9 +287,9 @@ void readFTDIConfig(FT_CFG *cfg)
     }
 #endif
     ftS = FT_SetLatencyTimer(cfg->ftH, 2);
-    // ftS = FT_SetUSBParameters(cfg->ftH, 0x10000, 0x10000);
-    // ftS = FT_SetUSBParameters(cfg->ftH, 0x02000, 0x02000); // 8192
-    ftS = FT_SetUSBParameters(cfg->ftH, 0x03000, 0x03000); // 16384
+    //ftS = FT_SetUSBParameters(cfg->ftH, 0x10000, 0x10000);
+    ftS = FT_SetUSBParameters(cfg->ftH, 0x02000, 0x02000); // 8192
+    //ftS = FT_SetUSBParameters(cfg->ftH, 0x03000, 0x03000); // 16384
   }
 }
 
